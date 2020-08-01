@@ -1,0 +1,6 @@
+Smiles	C1C=CC=CC=1
+Smiles	OC1=CC=CC=C1
+Smiles	O=CC=CC=CC=CC1=CC=CC=C1
+Smiles	O=C(OCCCO)C1C=CC(=CC=1)C(OCCCO)=O
+Smiles	O=C(OCCCCO)C1C=CC(=CC=1)C(OCCCCO)=O
+
