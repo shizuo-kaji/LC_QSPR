@@ -28,15 +28,15 @@ If you are on Windows, install Perl by
 
     Smiles	C1C=CC=CC=1
 
-    - *sample.txt*: text data from the database
-    - *TruthTable_sample.txt*: each line is either "true" or "false". Only those lines flagged as "true" will be computed.
+    - *raw_sample.txt*: text data from the database
+    - (optional) *TruthTable_sample.txt*: each line is either "true" or "false". Only those lines flagged as "true" will be computed.
 
 - (On Windows) open compute_desc.bat and edit variables +dpath+ and +num+ appropriately,
 and execute it. Wait for some time and you will obtain *desc_sample.csv*.
 
 - (On Unix/Mac)
-    - create an smi file combining the information of the above three files
-        > ./raw2phase.pl smiles_sample.txt sample.txt TruthTable_sample.txt >! sample.smi
+    - create an smi file combining the information of the above files (TruthTable_sample.txt is optional)
+        > perl raw2phase.pl smiles_sample.txt raw_sample.txt TruthTable_sample.txt >! sample.smi
 
      - compute descriptors using mordred (takes time, and may produce some ignorable errors)
 

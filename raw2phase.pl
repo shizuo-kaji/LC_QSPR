@@ -6,26 +6,36 @@
 use strict;
 use warnings;
 
+# prohibited patterns in SMILES
+my $prohibited = '[^cCHONSFClBrI\+\-\d\=\#\%\(\)\[\]]';
+
 # print usage
-if(@ARGV < 3) {
-         print "Usage: $0 smiles raw truth > output_file \n";
-		 exit;
+if(@ARGV < 2){
+	print "Usage: $0 smiles raw truth > output_file \n";
+	exit;
 }
 
 # read the input file
 my $smifile = shift;
 my $rawfile = shift;
-my $truthfile = shift;
 open(my $smifh, "<", $smifile) or die "Cannot open $smifile: $!";
 my @smi = readline $smifh;
 close $smifh;
 open(my $rawfh, "<", $rawfile) or die "Cannot open $rawfile: $!";
 my @raw = readline $rawfh;
 close $rawfh;
-open(my $truthfh, "<", $truthfile) or die "Cannot open $truthfile: $!";
-my @truth = readline $truthfh;
-close $truthfh;
 
+my @truth;
+if(@ARGV == 3) {
+	my $truthfile = shift;
+	open(my $truthfh, "<", $truthfile) or die "Cannot open $truthfile: $!";
+	@truth = readline $truthfh;
+	close $truthfh;
+}else{
+	for (my $i = 0; $i <= $#smi; $i++){
+		$truth[$i] = 'true';
+	}
+}
 
 # parse the phase string
 ## @arr is global
@@ -126,8 +136,8 @@ sub printline {
 		$prev_line =~ s/true\t//;
 		if($prev_line !~ /dup\t/){  ## duplicate
 			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Bmtype'},$arr{'Bm'},$arr{'Bptype'},$arr{'Bp'},$arr{'Cmtype'},$arr{'Cm'},$arr{'Cptype'},$arr{'Cp'},$arr{'Amtype'},$arr{'Am'},$arr{'Aptype'},$arr{'Ap'},$arr{'Smtype'},$arr{'Sm'},$arr{'Sptype'},$arr{'Sp'},$arr{'Nmtype'},$arr{'Nm'},$arr{'Nptype'},$arr{'Np'},$arr{'Clearing_type'},$arr{'Clearing'}";
-			## permissble pattern
-			if($smiles !~ /[^cCHONSFClBrI\+\-\d\=\#\%\(\)\[\]]/){
+			## pattern check flag
+			if($smiles !~ /$prohibited/){
 				print $prev_line.",0\n";
 			}else{
 				print $prev_line.",1\n";
