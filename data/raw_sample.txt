@@ -1,22 +1,19 @@
-Comp. ID: [74840]
+Comp. ID: [1]
 Formula: C6 H6
 Phases: Cr 6 is
 
-Comp. ID: [75888]
+Comp. ID: [2]
 Formula: C6 H6 O1
 Phases: Cr ? is
 
-Comp. ID: [1]
+Comp. ID: [3]
 Formula: C13 H12 O1
-Name: 7-Phenyl-hepta-2,4,6-trienal
-Phases: Cr 104 X 110 is
+Phases: Cr 104 ? 110 is
 
-Comp. ID: [63217]
+Comp. ID: [4]
 Formula: C14 H18 O6
-Name: Terephthalic acid bis-(3-hydroxy-propyl) ester
 Phases: Cr 73.2 is
 
-Comp. ID: [63218]
+Comp. ID: [5]
 Formula: C16 H22 O6
-Name: Terephthalic acid bis-(4-hydroxy-butyl) ester
 Phases: Cr 65 N 72 is
