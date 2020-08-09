@@ -132,10 +132,10 @@ sub analysePhase {
 
 sub printline {
 	my ($prev_line,$smiles,$phs) = @_;
-	if($prev_line =~ /true\t/){   ## corrupt compared with formula
+	if($prev_line =~ /true\t/){
 		$prev_line =~ s/true\t//;
 		if($prev_line !~ /dup\t/){  ## duplicate
-			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Bmtype'},$arr{'Bm'},$arr{'Bptype'},$arr{'Bp'},$arr{'Cmtype'},$arr{'Cm'},$arr{'Cptype'},$arr{'Cp'},$arr{'Amtype'},$arr{'Am'},$arr{'Aptype'},$arr{'Ap'},$arr{'Smtype'},$arr{'Sm'},$arr{'Sptype'},$arr{'Sp'},$arr{'Nmtype'},$arr{'Nm'},$arr{'Nptype'},$arr{'Np'},$arr{'Clearing_type'},$arr{'Clearing'}";
+			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Bmtype'},$arr{'Bm'},$arr{'Bptype'},$arr{'Bp'},$arr{'Cmtype'},$arr{'Cm'},$arr{'Cptype'},$arr{'Cp'},$arr{'Amtype'},$arr{'Am'},$arr{'Aptype'},$arr{'Ap'},$arr{'Smtype'},$arr{'Sm'},$arr{'Sptype'},$arr{'Sp'},$arr{'Nmtype'},$arr{'Nm'},$arr{'Nptype'},$arr{'Np'},$arr{'Clearing_type'},$arr{'Clearing'},$arr{'num_C'},$arr{'num_H'},$arr{'num_N'}";
 			## pattern check flag
 			if($smiles !~ /$prohibited/){
 				print $prev_line.",0\n";
@@ -148,7 +148,7 @@ sub printline {
 
 ## start here
 ## print header
-print "#SMILES,ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Clearing_type,Clearing,prohibited\n";
+print "#SMILES ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Clearing_type,Clearing,num_C,num_H,num_N,prohibited\n";
 
 my $prev_line="";
 my $smiles = "";
@@ -158,8 +158,8 @@ my $dup = 0;   ## flag for duplicate entry
 my $count = 0;
 # ID,smiles,Phase
 foreach my $line (@raw){
-	chomp($line);   ## for some reasons, the letter "C" is replaced with "." in all.txt
-	if ($line =~ /^.omp\.\sID:\s\[(\d+)\]/){
+	chomp($line);
+	if ($line =~ /^[C\.]omp\.\sID:\s\[(\d+)\]/){
 		my $id = $1;
 		$new_smiles = shift(@smi);
 		chomp($new_smiles);
@@ -179,10 +179,14 @@ foreach my $line (@raw){
 		&printline($prev_line,$smiles,$phs);
 #		if($count>1){ exit; }
 #		print("\n\n-----------------\n\n");
+
 		## begin a new entry
 		%arr = ("rac_en" => 0);
 		for my $ps ("Melting","Clearing","Bp","Cp","Ap","Sp","Np","Bm","Cm","Am","Sm","Nm"){
 			$arr{$ps} = -300;
+		}
+		for my $ps ("num_C","num_N","num_H"){
+			$arr{$ps} = 0;
 		}
 		$phs = "NEW";
 		$smiles = $new_smiles;
@@ -197,6 +201,18 @@ foreach my $line (@raw){
 		my $updated = &analysePhase($newphs);
 		if( $updated>0 || $phs =~ /NEW/){
 			$phs = $newphs;
+		}
+	}elsif($line =~ /^(Formula:)(.+)/){
+		my $newformula = $2;
+		$newformula =~ s/\./C/;
+		if($newformula =~ /\sC(\d+)/){
+			$arr{'num_C'} = $1;
+		}
+		if($newformula =~ /\sN(\d+)/){
+			$arr{'num_N'} = $1;
+		}
+		if($newformula =~ /\sH(\d+)/){
+			$arr{'num_H'} = $1;
 		}
 	}elsif($line =~ /Derivat\spure\senantiomer/){
 		$arr{'rac_en'} = "pure_en";

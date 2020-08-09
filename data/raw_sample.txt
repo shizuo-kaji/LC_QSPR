@@ -1,22 +1,22 @@
-.omp. ID: [74840]
+Comp. ID: [74840]
 Formula: C6 H6
-Phases: .r 6 is
+Phases: Cr 6 is
 
-.omp. ID: [75888]
+Comp. ID: [75888]
 Formula: C6 H6 O1
-Phases: .r ? is
+Phases: Cr ? is
 
-.omp. ID: [1]
+Comp. ID: [1]
 Formula: C13 H12 O1
 Name: 7-Phenyl-hepta-2,4,6-trienal
-Phases: .r 104 X 110 is
+Phases: Cr 104 X 110 is
 
-.omp. ID: [63217]
+Comp. ID: [63217]
 Formula: C14 H18 O6
 Name: Terephthalic acid bis-(3-hydroxy-propyl) ester
-Phases: .r 73.2 is
+Phases: Cr 73.2 is
 
-.omp. ID: [63218]
+Comp. ID: [63218]
 Formula: C16 H22 O6
 Name: Terephthalic acid bis-(4-hydroxy-butyl) ester
-Phases: .r 65 N 72 is
+Phases: Cr 65 N 72 is

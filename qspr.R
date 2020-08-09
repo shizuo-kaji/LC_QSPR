@@ -20,13 +20,14 @@ source("regression_lib.R")
 #### data preprocessing
 
 ## data file loading
-dat <- readcsv("desc_sample.csv")
-#dat <- readcsv("desc_010000.csv")
+#dat <- readcsv("desc_sample.csv")
+dat <- readcsv("desc_all.csv")
 ## add more data
 #dat <- rbind(dat,readcsv("desc107773.csv")) 
 
 ## load from compressed R data file
-#dat <- readRDS("formatted/chem_all_clean.rds")
+dat <- readRDS("desc_all.rds")
+
 ## select a part of the dataset
 #dat <- dat[!(dat$ID %in% 121104:121111),]
 
@@ -50,7 +51,7 @@ dat <- readcsv("desc_sample.csv")
 #LCexist=as.factor(apply(data.frame(dat$Cexist,dat$Aexist,dat$Nexist),1,max))
 
 ## save preprocessed data into a native R data format for faster loading for next time
-#saveRDS(dat,"chem_all_20190508.rds")
+#saveRDS(dat,"desc_all.rds")
 
 #################################################
 
@@ -82,24 +83,23 @@ dat <- data.frame(dat[,which(names(dat) %in% nonvar)],
 
 ## choose one variable to be predicted
 target <- "Clearing"
-#target <- "Melting"
+target <- "Melting"
 #target <- "Np"
 #target <- "Am"
 
 ## setting variables
 prepare_prediction(target)
 
-
 ## remove rows where the target attribute is absent
 dat <- dat[!is.na(dat[[target]]),]
+# remove rows with target < kelv or target > 800
+dat <- dat[dat[[target]] >= kelv,] 
+dat <- dat[dat[[target]] <= 800,] 
+# remove rows with target = 0 as they are not reliable
+dat <- dat[dat[[target]]!=0,]
 
 ## remove chiral
 #dat <- dat[dat$rac.en=="",] 
-
-# remove rows with target < kelv
-dat <- dat[dat[[target]] >= kelv,] 
-# remove rows with target = 0 as they are not reliable
-dat <- dat[dat[[target]]!=0,] 
 
 # select rows with a specified type
 #dat <- dat[dat[["Cmtype"]]==1,] 
@@ -116,7 +116,7 @@ ymax <- 350
 ## XGBoost regression
 library(xgboost)
 bst <- list()
-folds <- 4
+folds <- 5
 # model training
 for(i in 1:folds){  ## cross validation
   testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
@@ -147,6 +147,8 @@ for(i in 1:folds){  ## cross validation
 #bst <- readRDS(paste0(target,".rds"))
 prediction <- list()
 for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  dtest = xgb.DMatrix(data =  as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
   p <- predict(bst[[i]], dtest)
   t <- dat[testidx,target]
   prediction <- rbind(prediction,
@@ -161,7 +163,7 @@ plotpred(data.frame(prediction$pred,prediction$truth),paste0("XGBoost:",target),
 p <- prediction$ratio
 plotsort( p )
 quantile(p,c(0.05,0.1,0.5,0.9,0.95))
-hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
+hist(pmax( 0, pmin( p, 0.2)), freq=F, main="Histogram", xlab="error ratio")
 
 ## prediction results will be written to a csv: open it with, e.g., excel to see the results
 write.csv(file=paste0("pred_",target,".csv"), prediction, row.names = FALSE)
@@ -205,6 +207,8 @@ for(i in 1:folds){  ## cross validation
 # prediction
 prediction <- list()
 for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  dtest = xgb.DMatrix(data =  as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
   p <- predict(bst[[i]], dtest,reshape=T)
   t <- dat[testidx,target]
   prediction <- rbind(prediction,
@@ -220,6 +224,33 @@ confusionMatrix(factor(prediction$pred),
                 mode = "everything")
 write.csv(file=paste0("clas_",target,".csv"), prediction, row.names = FALSE)
 
+
+
+################
+library(lightgbm)
+i <- 1
+folds <- 5
+testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
+dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
+params <- list(objective="regression", metric="l2")
+#bst <- lgb.cv(params, dtrain, 10, nfold=5, min_data=1, learning_rate=1, early_stopping_rounds=80)
+bst <- lgb.train(params, dtrain, nrounds=10000, eval_freq=50, min_data=1, learning_rate=1, early_stopping_rounds=80, valids=list(test=dtest))
+
+p <- predict(bst, as.matrix(dat[testidx,varcol]),reshape=T)
+t <- dat[testidx,target]
+prediction <- data.frame(
+                      ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                      pred=p,truth=t,error=p-t,
+                      ratio=abs(p-t)/(t-kelv))
+
+# plot prediction vs truth
+plotpred(data.frame(prediction$pred,prediction$truth),paste0("lighGBM:",target),sort=T)
+# error ratio
+p <- prediction$ratio
+plotsort( p )
+quantile(p,c(0.05,0.1,0.5,0.9,0.95))
+hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
 
 #################
 # I have only fixed up to here.

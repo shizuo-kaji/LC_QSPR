@@ -10,7 +10,7 @@
 from __future__ import print_function
 
 import matplotlib.pyplot as plt
-import argparse
+import argparse,os
 import chainer
 import chainer.functions as F
 import chainer.links as L
@@ -18,6 +18,7 @@ from chainer import training,datasets,iterators
 from chainer.training import extensions
 import numpy as np
 import pandas as pd
+from chainer.dataset import dataset_mixin, convert, concat_examples
 
 # activation function
 activ = {
@@ -29,35 +30,38 @@ activ = {
 
 # Neural Network definition
 class MLP(chainer.Chain):
-    def __init__(self, args):
+    def __init__(self, args, std=1):
         super(MLP, self).__init__()
         self.activ=activ[args.activation]
         self.layers = args.layers
         self.out_ch = args.out_ch
+        self.std = std
         self.dropout_ratio = args.dropout_ratio
-        self.add_link('norm{}'.format(0), L.BatchNormalization(args.in_ch))        
+#        self.add_link('norm{}'.format(0), L.BatchNormalization(args.in_ch))        
         self.add_link('layer{}'.format(0), L.Linear(None,args.unit))
         for i in range(1,self.layers):
             self.add_link('norm{}'.format(i), L.BatchNormalization(args.unit))        
             self.add_link('layer{}'.format(i), L.Linear(args.unit,args.unit))
         self.add_link('fin_layer', L.Linear(args.unit,args.out_ch))
 
-    def __call__(self, x, t):
-        h = self['norm{}'.format(0)](x)
-        h = self['layer{}'.format(0)](h)
+    def __call__(self, x, t=0):
+#        h = self['norm{}'.format(0)](x)
+        h = self['layer{}'.format(0)](x)
         h = F.dropout(self.activ(h),ratio=self.dropout_ratio)
         for i in range(1,self.layers):
             h = self['norm{}'.format(i)](h)
             h = F.dropout(self.activ(self['layer{}'.format(i)](h)),ratio=self.dropout_ratio)
             #h = F.dropout(self.activ(self.bn(self.l2(h))))
         h = self['fin_layer'](h)
-        if self.out_ch > 1:    # classification
-            loss = F.softmax_cross_entropy(h, t)
-            chainer.report({'loss': loss, 'accuracy': F.accuracy(h, t)}, self)
-        else:   #regression
-            loss = F.mean_squared_error(t, h)
-            chainer.report({'loss': loss}, self)
         if chainer.config.train:
+            if self.out_ch > 1:    # classification
+                loss = F.softmax_cross_entropy(h, t)
+                chainer.report({'loss': loss, 'accuracy': F.accuracy(h, t)}, self)
+            else:   #regression
+                loss = F.mean_squared_error(t, h)
+                MAE = self.std*F.mean_absolute_error(t,h)
+                chainer.report({'loss': loss}, self)
+                chainer.report({'MAE': MAE}, self)
             return loss
         return h
 
@@ -100,16 +104,18 @@ def main():
     parser.add_argument('--weight_decay', '-w', type=float, default=0,
                         help='weight decay for regularization')
     args = parser.parse_args()
-
-    ##
-    print('GPU: {} Minibatch-size: {} # epoch: {}'.format(args.gpu,args.batchsize,args.epoch))
+    args.regress = (args.out_ch == 1)
 
     # select numpy or cupy
     xp = chainer.cuda.cupy if args.gpu >= 0 else np
-    label_type = np.int32 if args.out_ch>1 else np.float32
+    label_type = np.int32 if not args.regress else np.float32
 
     # read csv file
     dat = pd.read_csv(args.dataset, header=0)
+
+    ##
+    print('Target: {}, GPU: {} Minibatch-size: {} # epoch: {}'.format(dat.keys()[args.label_index],args.gpu,args.batchsize,args.epoch))
+
 #    csvdata = np.loadtxt(args.dataset, delimiter=",", skiprows=args.skip_rows)
     ind = np.ones(dat.shape[1], dtype=bool)  # indices for unused columns
     dat = dat.dropna(axis='columns')
@@ -120,14 +126,21 @@ def main():
 #    print('excluded columns: {}'.format(np.where(ind==False)[0].tolist()))
     print("data shape: ",x.shape, t.shape)
     x = np.array(x, dtype=np.float32)
-    if args.out_ch > 1:
-        t = np.array(np.ndarray.flatten(t), dtype=label_type)
-    else:
+    if args.regress:
         t = np.array(t, dtype=label_type)
+    else:
+        t = np.array(np.ndarray.flatten(t), dtype=label_type)
 
+    # standardize
+    t_mean = np.mean(t)
+    t_std = np.std(t)
+    x_mean = np.mean(x)
+    x_std = np.std(x)
+    x = (x-x_mean)/x_std
+    t = (t-t_mean)/t_std
 
     # Set up a neural network to train
-    model = MLP(args)
+    model = MLP(args,std=t_std)
     if args.gpu >= 0:
         chainer.cuda.get_device(args.gpu).use()  # Make a specified GPU current
         model.to_gpu()  # Copy the model to the GPU
@@ -186,7 +199,7 @@ def main():
                 'epoch', file_name='accuracy.png'))
 
     trainer.extend(extensions.PrintReport(
-        ['epoch', 'main/loss', 'validation/main/loss',
+        ['epoch', 'main/loss', 'validation/main/loss', 'main/MAE', 'validation/main/MAE',
          'main/accuracy', 'validation/main/accuracy', 'elapsed_time']), trigger=log_interval)
 
     trainer.extend(extensions.ProgressBar(update_interval=10))
@@ -201,40 +214,48 @@ def main():
 
     ## prediction
     print("predicting: {} entries...".format(len(test)))
-    nvar, = test[0][0].shape
-    x = xp.zeros((len(test), nvar)).astype(np.float32)
-    for i in range(len(test)):
-        x[i,:] = xp.asarray(test[i][0])
-    if args.out_ch > 1:
-        t = xp.zeros(len(test)).astype(label_type)
-        for i in range(len(test)):
-            t[i] = xp.asarray(test[i][1])
-    else:
-        t = xp.zeros((len(test), 1)).astype(label_type)
-        for i in range(len(test)):
-            t[i,:] = xp.asarray(test[i][1])
+    test_iter = iterators.SerialIterator(test, args.batchsize, repeat=False, shuffle=False)
+    converter=concat_examples
+    idx=0
+    with open(os.path.join(args.outdir,'result.txt'),'w') as output:
+        for batch in test_iter:
+            x, t = converter(batch, device=args.gpu)
+            with chainer.using_config('train', False):
+                with chainer.function.no_backprop_mode():
+                    if args.regress:
+                        y = model(x).data
+                        if args.gpu>-1:
+                            y = xp.asnumpy(y)
+                            t = xp.asnumpy(t)
+                        y = y * t_std + t_mean
+                        t = t * t_std + t_mean
+                    else:
+                        y = F.softmax(model(x)).data
+                        if args.gpu>-1:
+                            y = xp.asnumpy(y)
+                            t = xp.asnumpy(t)
+            for i in range(y.shape[0]):
+                output.write(str(dat.iloc[var_idx[i],0]))
+                if(len(t.shape)>1):
+                    for j in range(t.shape[1]):
+                        output.write(",{}".format(t[i,j]))
+                        output.write(",{}".format(y[i,j]))
+                else:
+                    output.write(",{0:1.5f},{0:1.5f}".format(t[i],y[i]))
+#                    output.write(",{0:1.5f}".format(np.argmax(y[i,:])))
+#                    for yy in y[i]:
+#                        output.write(",{0:1.5f}".format(yy))
+                output.write("\n")
+                idx += 1
 
-    with chainer.using_config('train', False):
-        y = model(x,t)
-    if args.gpu >= 0:
-        pred = chainer.cuda.to_cpu(y.data)
-    else:
-        pred = y.data
-    if args.out_ch > 1:    # classification
-        p=np.argmax(pred,axis=1)
-        result = np.vstack((t,p)).astype(np.int32).transpose()
-        print(result.tolist())
-        np.savetxt(args.outdir+"/nn-out.csv", result, delimiter="," ,header="truth,prediction")
-    else:
-        rmse = F.mean_squared_error(pred,t)
-        result = np.vstack((t[:,0],pred[:,0])).transpose()
-        np.savetxt(args.outdir+"/nn-out.csv", result , delimiter="," ,header="truth,prediction")
-        # draw a graph
-        left = np.arange(len(test))
-        plt.plot(left, t[:,0], color="royalblue")
-        plt.plot(left, pred[:,0], color="crimson", linestyle="dashed")
-        plt.title("RMSE: {}".format(np.sqrt(rmse.data)))
-        plt.show()
+        # rmse = F.mean_squared_error(pred,t)
+        # result = np.vstack((tt,pred[:,0])).transpose()
+        # # draw a graph
+        # left = np.arange(len(test))
+        # plt.plot(left, tt, color="royalblue")
+        # plt.plot(left, pred[:,0], color="crimson", linestyle="dashed")
+        # plt.title("RMSE: {}".format(np.sqrt(rmse.data)))
+        # plt.show()
 
 if __name__ == '__main__':
     main()
