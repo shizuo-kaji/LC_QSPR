@@ -13,22 +13,35 @@
 
 source("regression_lib.R")
 
-############## Start here ##################################
+## variables which are not used for prediction
+nonvar <- c(
+  "ID","SMILES","Phases","rac_en","Melting","Melting_type",
+  "Cmtype","Cm","Cptype","Cp","Amtype","Am","Aptype","Ap","Bmtype","Bm","Bptype","Bp","Smtype","Sm","Sptype","Sp","Nmtype","Nm","Nptype","Np","Dhmtype","Dhm","Dhptype","Dhp",
+  "Clearing_type","Clearing","num_C","num_H","num_N","prohibited"
+)
+kelv = -273.15
+## target value bounds for graph drawing
+ymin <- 0
+ymax <- 350
+
+## 1) ############ Start here ##################################
 ## Set the working directory
 #setwd("data")
 
-#### data preprocessing
-
 ## data file loading
+## load from compressed R data file: you can skip to 2)
+dat <- readRDS("desc_CN12.rds")
+
 #dat <- readcsv("desc_sample.csv")
-dat <- readcsv("desc_all.csv")
+dat <- readcsv("d:/ml_res/desc_all.csv")
 ## add more data
 #dat <- rbind(dat,readcsv("desc107773.csv")) 
 
-## load from compressed R data file
-dat <- readRDS("desc_all.rds")
+###############################
+### data preprocessing
 
-## select a part of the dataset
+###### data selection
+## select by ID
 #dat <- dat[!(dat$ID %in% 121104:121111),]
 
 ## extract molecules with a specified phase transition
@@ -38,30 +51,27 @@ dat <- readRDS("desc_all.rds")
 #matched <- grep('A[[:digit:][:space:]\\*\\.\\?]+[Ni]',dat$Phases)
 #dat <- dat[matched,]
 
+## select only molecules with #C+#N >= 12 (remove small and non-organic)
+dat <- dat[(dat$num_C+dat$num_N)>=12,]
+
+
 ## select thoes do not contain prohibited atoms
 #dat <- dat[dat$prohibited == 0,]
 
+## remove chiral
+#dat <- dat[dat$rac.en=="",] 
+
+### add some factor variables
+#dat[,rac_en:=as.factor(dat$rac_en)]
+#LCexist=as.factor(apply(data.frame(dat$Cexist,dat$Aexist,dat$Nexist),1,max))
+
+########## missing value handling
 ## Impute missing values
 #library(missForest)
 #dat <- missForest(dat)
 ## zero fill
 #dat[is.na(dat)] <- 0
 
-#dat[,rac_en:=as.factor(dat$rac_en)]
-#LCexist=as.factor(apply(data.frame(dat$Cexist,dat$Aexist,dat$Nexist),1,max))
-
-## save preprocessed data into a native R data format for faster loading for next time
-#saveRDS(dat,"desc_all.rds")
-
-#################################################
-
-## variables which are not used for prediction
-nonvar <- c(
-  "ID","SMILES","Phases","rac_en","Melting","Cmtype","Cm","Cptype","Cp","Amtype","Am","Aptype","Ap","Smtype","Sm","Sptype","Sp","Nmtype","Nm","Nptype","Np","Clearing_type","Clearing","unknownX"
-)
-kelv = -273.15
-
-### cleaning
 ## remove rows with NA
 #dat <- na.omit(dat)
 ## remove columns with NA
@@ -74,44 +84,52 @@ dat <- dat[, (!is.na(dat_sd) & dat_sd>1e-24) | (colnames(dat) %in% nonvar)]
 
 ## scale for regression
 dat <- data.frame(dat[,which(names(dat) %in% nonvar)],
-                          scale(dat[,-which(names(dat) %in% nonvar)]))
+                  scale(dat[,-which(names(dat) %in% nonvar)]))
 ## scale for classification
 #dat <- data.frame(Name=dat$Name,ID=dat$ID,LCexist=as.factor(LCexist),Cexist=as.factor(dat$Cexist),
 #                  Aexist=as.factor(dat$Aexist),Nexist=as.factor(dat$Nexist),
 #                  scale(dat[,-which(names(dat) %in% nonvar)]))
 
 
+####
+## save data into a native R data format for faster loading for next time
+#saveRDS(dat,"desc_CN12.rds")
+#saveRDS(dat,"desc_all.rds")
+
+
+#### 2) #############################################
+
 ## choose one variable to be predicted
-target <- "Clearing"
-target <- "Melting"
-#target <- "Np"
-#target <- "Am"
+#target <- "Clearing"
+#dat <- dat[dat$Clearing_type==1,]
+
+#target <- "Melting"
+#dat <- dat[dat$Melting_type==1,]   # remove glass (Tg)
+
+## for Nm, remove monotropic
+target <- "Np"
+dat <- dat[dat$Nm < dat$Np,]
+#dat <- dat[dat$Nptype==2,]
+
+#target <- "Ap"
+#dat <- dat[dat$Am < dat$Ap,]
+
+target <- "Cp"
+dat <- dat[dat$Cm < dat$Cp,]
+
+#target <- "Bp"
+#dat <- dat[dat$Bm < dat$Bp,]
+
+#target <- "Dhp"
+#dat <- dat[dat$Dhm < dat$Dhp,]
 
 ## setting variables
 prepare_prediction(target)
 
-## remove rows where the target attribute is absent
-dat <- dat[!is.na(dat[[target]]),]
-# remove rows with target < kelv or target > 800
-dat <- dat[dat[[target]] >= kelv,] 
-dat <- dat[dat[[target]] <= 800,] 
-# remove rows with target = 0 as they are not reliable
-dat <- dat[dat[[target]]!=0,]
-
-## remove chiral
-#dat <- dat[dat$rac.en=="",] 
-
-# select rows with a specified type
-#dat <- dat[dat[["Cmtype"]]==1,] 
-
-## save to a csv file
+## save the preprocessed data to a csv file
 #write.csv(file="PhCN-processed.csv", na.omit(dat), row.names = FALSE)
 
 ##############################################################################
-
-## target value bounds for graph drawing
-ymin <- 0
-ymax <- 350
 
 ## XGBoost regression
 library(xgboost)
@@ -125,9 +143,9 @@ for(i in 1:folds){  ## cross validation
   watchlist = list(train=dtrain, test=dtest)
   bst[[i]] = xgb.train(data = dtrain, booster="gbtree",
                   max.depth = 6, 
-                  eta = 0.05,
-                  alpha = 1.0,
-                  lambda = 1.0,
+                  eta = 0.05,  # learning rate
+                  alpha = 1.0, # L1
+                  lambda = 1.0, # L2
 #                  nthread = 8, # automatically set
                   nround = 10000, 
                   colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8, gamma = 2,
@@ -136,10 +154,6 @@ for(i in 1:folds){  ## cross validation
                   print_every_n = 500,
                   ## for regression
 #                  objective = "reg:squarederror", 
-                  ## for classification
-#                  objective = "multi:softprob",
-#                  eval_metric = "mlogloss",
-#                  num_class = 3
                   )
 }
 
@@ -162,7 +176,7 @@ plotpred(data.frame(prediction$pred,prediction$truth),paste0("XGBoost:",target),
 # error ratio
 p <- prediction$ratio
 plotsort( p )
-quantile(p,c(0.05,0.1,0.5,0.9,0.95))
+quantile(p,c(0.05,0.1,0.3,0.5,0.7,0.9,0.95))
 hist(pmax( 0, pmin( p, 0.2)), freq=F, main="Histogram", xlab="error ratio")
 
 ## prediction results will be written to a csv: open it with, e.g., excel to see the results
@@ -177,11 +191,12 @@ xgb.plot.importance(head(importance,20))
 
 ###################################
 ### classification
-target <- "Nmtype"
+dat <- readRDS("desc_CN12.rds")
+target <- "Cptype"
 prepare_prediction(target)
 
 bst <- list()
-folds <- 4
+folds <- 5
 for(i in 1:folds){  ## cross validation
   testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
   dtrain = xgb.DMatrix(data =  as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
@@ -201,7 +216,7 @@ for(i in 1:folds){  ## cross validation
                        ## for classification
                                          objective = "multi:softprob",
                                          eval_metric = "mlogloss",
-                                         num_class = 3
+                                         num_class = 3 # may need to be changed
   )
 }
 # prediction
@@ -214,35 +229,69 @@ for(i in 1:folds){
   prediction <- rbind(prediction,
                       data.frame(
                         ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                        pred=max.col(p, ties.method = "last"),
-                        prob1=p[,1],prob2=p[,2],prob3=p[,3],
+                        pred=max.col(p, ties.method = "last")-1,
+                        prob0=p[,1],prob1=p[,2],prob2=p[,3],
                         truth=t))
 }
-# types: 0 means "not exist", 1 means "exist", 2 means "(*)"
+# types: 0 means "not exist", 1 means "exist", 2 means "(*)"; e.g., N* means cholesteric
 confusionMatrix(factor(prediction$pred),
-                factor(prediction$truth+1),
+                factor(prediction$truth),
                 mode = "everything")
 write.csv(file=paste0("clas_",target,".csv"), prediction, row.names = FALSE)
+saveRDS(bst,paste0(target,".rds"))
+
+### Variable importance
+importance <- xgb.importance(model = bst[[1]])
+head(importance,20)
+xgb.plot.importance(head(importance,20))
 
 
 
 ################
-library(lightgbm)
-i <- 1
-folds <- 5
-testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
-dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
-dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
-params <- list(objective="regression", metric="l2")
-#bst <- lgb.cv(params, dtrain, 10, nfold=5, min_data=1, learning_rate=1, early_stopping_rounds=80)
-bst <- lgb.train(params, dtrain, nrounds=10000, eval_freq=50, min_data=1, learning_rate=1, early_stopping_rounds=80, valids=list(test=dtest))
+##https://github.com/microsoft/LightGBM/tree/master/R-package
+#PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r-cran.tar.gz"
+#remotes::install_url(PKG_URL, INSTALL_OPTS = "--no-multiarch")
 
-p <- predict(bst, as.matrix(dat[testidx,varcol]),reshape=T)
-t <- dat[testidx,target]
-prediction <- data.frame(
-                      ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                      pred=p,truth=t,error=p-t,
-                      ratio=abs(p-t)/(t-kelv))
+## binary
+#PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r40-windows.zip"
+#local_file <- paste0("lightgbm.", tools::file_ext(PKG_URL))
+#download.file(  url = PKG_URL  , destfile = local_file)
+#install.packages(  pkgs = local_file  , type = "binary"  , repos = NULL)
+
+library(lightgbm)
+
+dat <- readRDS("desc_CN12.rds")
+target <- "Np"
+prepare_prediction(target)
+dat <- dat[dat$Nm < dat$Np,]
+
+folds <- 5
+bst <- list()
+for(i in 1:folds){  ## cross validation
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
+  dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
+  params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+  #bst[[i]] <- lgb.cv(params, dtrain, 10, nfold=5, min_data=1, learning_rate=1, early_stopping_rounds=80)
+  bst[[i]] <- lgb.train(params, dtrain, 
+#                   device_type="gpu", 
+                   seed = 42,force_col_wise=T,
+                   num_leaves=2^3,  # should be less than 2^max_depth
+                   colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                   nrounds=10000, eval_freq=500, min_data=1, learning_rate=0.1, 
+                   early_stopping_rounds=80, valids=list(test=dtest))
+}
+prediction <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  p <- predict(bst[[i]], as.matrix(dat[testidx,varcol]),reshape=T)
+  t <- dat[testidx,target]
+  prediction <- rbind(prediction,
+                      data.frame(
+                        ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                        pred=p, truth=t, error=p-t,
+                        ratio=abs(p-t)/(t-kelv)))
+}
 
 # plot prediction vs truth
 plotpred(data.frame(prediction$pred,prediction$truth),paste0("lighGBM:",target),sort=T)
@@ -252,6 +301,39 @@ plotsort( p )
 quantile(p,c(0.05,0.1,0.5,0.9,0.95))
 hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
 
+## prediction results will be written to a csv: open it with, e.g., excel to see the results
+write.csv(file=paste0("pred_lgb_",target,".csv"), prediction, row.names = FALSE)
+importance <- lgb.importance(model = bst[[2]])
+lgb.plot.importance(
+  importance, top_n = 10L, measure = "Gain", left_margin = 10L, cex = NULL
+)
+
+
+
+######
+library(data.table)
+grid_search <- expand.grid(Depth = 2:8,L1 = 0:5,L2 = 0:5)
+model <- list()
+perf <- numeric(nrow(grid_search))
+for (i in 1:nrow(grid_search)) {
+  model[[i]] <- lgb.train(list(objective = "regression",
+                               metric = "l2",
+                               lambda_l1 = grid_search[i, "L1"],
+                               lambda_l2 = grid_search[i, "L2"],
+                               max_depth = grid_search[i, "Depth"]),
+                          dtrain,
+                          num_leaves=2^3,
+#                          device_type="gpu", 
+                          seed = 42,
+                          colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                          nrounds=10000, eval_freq=200, min_data=1, learning_rate=0.1, 
+                          early_stopping_rounds=80, valids=list(test=dtest))
+  perf[i] <- min(rbindlist(model[[i]]$record_evals$test$l2))
+}
+cat("Model ", which.min(perf), " is lowest loss: ", min(perf), sep = "","\n")
+print(grid_search[which.min(perf), ])
+
+
 #################
 # I have only fixed up to here.
 # TODO: fix below
@@ -260,37 +342,9 @@ hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
 #######################################################################
 testidx <- grep('B[[:digit:][:space:]\\*\\.\\?]+A',dat$Phases)
 testidx <- grep('A[[:digit:][:space:]\\*\\.\\?]+i',dat$Phases)
-dtrain = xgb.DMatrix(data =  as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
-dtest = xgb.DMatrix(data =  as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
-watchlist = list(train=dtrain, test=dtest)
-bst = xgb.train(data = dtrain, booster="gbtree",
-                     max.depth = 6, 
-                     eta = 0.05,
-                     alpha = 1.0,
-                     lambda = 1.0,
-                     #                  nthread = 8, # automatically set
-                     nround = 10000, 
-                     colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8, gamma = 2,
-                     watchlist = watchlist, 
-                     early_stopping_rounds = 80,
-                     print_every_n = 500,
-                     ## for regression
-                     objective = "reg:linear", 
-                     ## for classification
-                     #                  objective = "multi:softprob",
-                     #                  eval_metric = "mlogloss",
-                     #                  num_class = 3
-)
-p <- predict(bst, dtest)
-t <- dat[testidx,target]
-prediction <- data.frame(
-                      ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                      pred=p, truth=t, error=p-t,
-                      ratio=(p-t)/(t-kelv))
-plotpred(data.frame(prediction$pred,prediction$truth),paste0("XGBoost:",target),sort=T)
 
 #############
-## CV
+## hyper-parameter search
 library(doParallel)
 registerDoParallel(makePSOCKcluster(4))
 set.seed(0)
@@ -330,11 +384,10 @@ print(model)
 #model <- readRDS("carret_tuning.rds")
 #write.csv(file="tuning.csv", model$results)
 
+
+##############################################
 ## Random Forest
 library(randomForest)
-model <- randomForest(f, data=dat, ntree=1000) #,importance=T)
-
-##CV
 prediction <- list()
 for(i in 1:5){
   testidx <- which(1:length(dat[,1])%%5 == (i%%5))
@@ -350,7 +403,6 @@ prediction <- prediction[sortlist,]
 ymin=0
 ymax=2
 plotpred(prediction,"randomForest",sort=F)
-
 
 print(model)
 prediction <- predict(model, dat[testidx,])
@@ -444,6 +496,27 @@ prediction <- class::knn(train=dat[-testidx,varcol],
                          cl=dat[-testidx,targetcol], k=3)
 plottab(prediction,testdat[,targetcol])
 
+
+## (generalised) linear regression
+require(coefplot)
+model <- lm(f, data=dat[-testidx,], na.action = na.exclude)
+model <- glm(f, data=dat[-testidx,], family = gaussian)
+summary(model)
+anova(model)
+prediction <- predict(model, newdata=dat[testidx,])
+coefplot(model)
+plotpred(prediction,dat[testidx,targetcol], "Linear Regression",sort=T)
+library(semPlot)
+semPaths(model,what="std",layout="circle")
+
+## regularised regression
+library(glmnet)
+model <- cv.glmnet(as.matrix(dat[-testidx,varcol]), as.vector(dat[-testidx,targetcol]), family="gaussian")
+prediction <- predict(model, newx=as.matrix(dat[testidx,varcol]))
+#plot(gmodel)
+#coefplot(gmodel, lambda='lambda.1se')
+plotpred(prediction,dat[testidx,targetcol],"Regularized Regression",sort=T)
+
 ## Baysian classification
 model <- naiveBayes(f, data=traindat, laplace=0)
 prediction <- predict(model, testdat, type="class")
@@ -508,26 +581,6 @@ clusplot(dat[,varcol], cluster$cluster, col.p=dat[,targetcol], shade=TRUE, label
 cluster = cmeans(dist(dat[,varcol]), centers = 5)
 clusplot(dat[,varcol], cluster$cluster, col.p=dat[,targetcol], shade=TRUE, labels=0, lines=1)
 
-## (generalised) linear regression
-require(coefplot)
-model <- lm(f, data=dat[-testidx,], na.action = na.exclude)
-model <- glm(f, data=dat[-testidx,], family = gaussian)
-summary(model)
-anova(model)
-prediction <- predict(model, newdata=dat[testidx,])
-coefplot(model)
-plotpred(prediction,dat[testidx,targetcol], "Linear Regression",sort=T)
-library(semPlot)
-semPaths(model,what="std",layout="circle")
-
-## regularised regression
-library(glmnet)
-model <- cv.glmnet(as.matrix(dat[-testidx,varcol]), as.vector(dat[-testidx,targetcol]), family="gaussian")
-prediction <- predict(model, newx=as.matrix(dat[testidx,varcol]))
-#plot(gmodel)
-#coefplot(gmodel, lambda='lambda.1se')
-plotpred(prediction,dat[testidx,targetcol],"Regularized Regression",sort=T)
-
 ## plot from the output of chainer code
 res <- read.csv("result_PH1.txt", header=F, sep = ",", stringsAsFactors = FALSE)
 target=0
@@ -559,9 +612,19 @@ selected <- c(rep(T,length(nonvar)),(attStats(boruta.bank)[[1]]>6))
 sdat <- dat[,selected]
 dat <- sdat
 
+## PredPsych
+#dyn.load("/Library/Java/JavaVirtualMachines/jdk1.8.0_31.jdk/Contents/Home/jre/lib/server/libjvm.dylib")
+library(FSelector)
+library(PredPsych)
+weights <- chi.squared(f,dat)
+weights <- information.gain(f, dat)
+print(weights)
+#fscore(dat,classCol = 1, featureCol = c(2:83))
+# select 5 most important vars
+selected_features <- cutoff.k(weights, 20)
+f <- as.simple.formula(selected_features, target)
 
 ## t-test
-setwd("~/Dropbox/tex/Liquid Crystal/analysis/20181126/analysis")
 ptemp <- readcsv("pred-CAN-Nptemp.csv")
 mtemp <- readcsv("pred-CAN-Nmtemp.csv")
 #write.csv(file=paste0("pred-PhCN1_",target,".csv"), bad, row.names = FALSE)
@@ -594,7 +657,7 @@ plotpred(data.frame(x,y),"C",sort=T)
 plotpred(data.frame(x),"C",sort=T)
 
 #
-ptemp <- readcsv("~/Downloads/result.csv",header=F)
+ptemp <- readcsv("result.csv",header=F)
 ymin=0
 ymax=10
 target=""
@@ -610,17 +673,6 @@ plotpred(data.frame(true=ptemp$V4,pred=ptemp$V5),"H_1",sort=F)
 library(vioplot)
 vioplot(ptemp[[errtarget]],mtemp[[errtarget]],names=c("above","below"))
 
-## PredPsych
-#dyn.load("/Library/Java/JavaVirtualMachines/jdk1.8.0_31.jdk/Contents/Home/jre/lib/server/libjvm.dylib")
-library(FSelector)
-library(PredPsych)
-weights <- chi.squared(f,dat)
-weights <- information.gain(f, dat)
-print(weights)
-#fscore(dat,classCol = 1, featureCol = c(2:83))
-# select 5 most important vars
-selected_features <- cutoff.k(weights, 20)
-f <- as.simple.formula(selected_features, target)
 
 ## rcdk
 library(rcdk)

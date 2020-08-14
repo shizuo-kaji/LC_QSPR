@@ -18,7 +18,6 @@ library(e1071)
 library(gbm)
 library(caret)
 library(dplyr)  
-library(umap)
 
 ############## function definition ####################
 ## load csv file
@@ -131,7 +130,16 @@ prepare_prediction <- function(target){
   targetcol <<- colnames(dat) %in% target
   varcol <<- colnames(dat) %in% expvar
   f <<- as.formula(paste(paste(target, collapse=" + "),paste(expvar, collapse=" + "), sep=" ~ "))
+  n <- nchar(target)
+  if(n<4 && (substr(target,n,n)=="m" || substr(target,n,n)=="p")){
+    ## remove rows where the target attribute is absent
+    dat <<- dat[!is.na(dat[[target]]),]
+    # remove rows with target < kelv or target > 800
+    dat <<- dat[dat[[target]] >= kelv,] 
+    dat <<- dat[dat[[target]] <= 800,] 
+    # remove rows with target = 0 as they are not reliable
+    dat <<- dat[dat[[target]]!=0,]
+  }
 }
 ############## End of function definition ####################
-
 

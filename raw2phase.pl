@@ -47,11 +47,16 @@ sub analysePhase {
 	$pline =~ s/\s0\sX\s/ X /g;
 	$pline =~ s/\sX\s0\s/ X /g;
 	$pline =~ s/\s0\s0\s/ X /g;
+	$pline =~ s/\sDh[od]*\s/ Dh /g;
 	# melting
 	unless($arr{"Melting"}>-300){
 #		print "\n$pline\n$arr{'Melting'}\n";
 		if ($pline =~ /Cr\s+(-?\d+(\.\d+)?)\s+/){
 			$arr{"Melting_type"} = 1;
+			$arr{"Melting"} = $1;
+			$updated = 1;
+		}elsif ($pline =~ /Cr1\s+(-?\d+(\.\d+)?)\s+/){
+			$arr{"Melting_type"} = 3;  ## second Cr: Cr2 -> Cr1 -> X
 			$arr{"Melting"} = $1;
 			$updated = 1;
 		}elsif ($pline =~ /Tg\s+(-?\d+(\.\d+)?)\s+/){
@@ -89,7 +94,7 @@ sub analysePhase {
 #	print "$pline\n";
 #	print "$arr{'Clearing'}\n";
 	# phases:  type = 0 (none) 1 (normal) 2 (*)
-	foreach my $ps ("B","C","A","S","N"){
+	foreach my $ps ("B","C","A","S","N","Dh"){
 		# below
 		unless($arr{$ps."m"}>-300){
 			if ($pline =~ /\s+(-?\d+(\.\d+)?)\s+$ps\s/){
@@ -110,11 +115,11 @@ sub analysePhase {
 		}
 			# above
 		unless($arr{$ps."p"}>-300){
-			if ($pline =~ /\s$ps\s+(-?\d+(\.\d+)?)\s/){
+			if ($pline =~ /.+\s$ps\s+(-?\d+(\.\d+)?)\s/){  # .+ forces last match
 				$arr{$ps."ptype"} = 1;
 				$arr{$ps."p"} = $1;
 				$updated = 1;
-			}elsif ($pline =~ /\s$ps\*\s+(-?\d+(\.\d+)?)\s/){
+			}elsif ($pline =~ /.+\s$ps\*\s+(-?\d+(\.\d+)?)\s/){ # .+ forces last match
 				$arr{$ps."ptype"} = 2;
 				$arr{$ps."p"} = $1;
 				$updated = 1;
@@ -135,7 +140,7 @@ sub printline {
 	if($prev_line =~ /true\t/){
 		$prev_line =~ s/true\t//;
 		if($prev_line !~ /dup\t/){  ## duplicate
-			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Bmtype'},$arr{'Bm'},$arr{'Bptype'},$arr{'Bp'},$arr{'Cmtype'},$arr{'Cm'},$arr{'Cptype'},$arr{'Cp'},$arr{'Amtype'},$arr{'Am'},$arr{'Aptype'},$arr{'Ap'},$arr{'Smtype'},$arr{'Sm'},$arr{'Sptype'},$arr{'Sp'},$arr{'Nmtype'},$arr{'Nm'},$arr{'Nptype'},$arr{'Np'},$arr{'Clearing_type'},$arr{'Clearing'},$arr{'num_C'},$arr{'num_H'},$arr{'num_N'}";
+			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Bmtype'},$arr{'Bm'},$arr{'Bptype'},$arr{'Bp'},$arr{'Cmtype'},$arr{'Cm'},$arr{'Cptype'},$arr{'Cp'},$arr{'Amtype'},$arr{'Am'},$arr{'Aptype'},$arr{'Ap'},$arr{'Smtype'},$arr{'Sm'},$arr{'Sptype'},$arr{'Sp'},$arr{'Nmtype'},$arr{'Nm'},$arr{'Nptype'},$arr{'Np'},$arr{'Dhm'},$arr{'Dhmtype'},$arr{'Dhp'},$arr{'Dhptype'},$arr{'Clearing_type'},$arr{'Clearing'},$arr{'num_C'},$arr{'num_H'},$arr{'num_N'}";
 			## pattern check flag
 			if($smiles !~ /$prohibited/){
 				print $prev_line.",0\n";
@@ -148,7 +153,7 @@ sub printline {
 
 ## start here
 ## print header
-print "#SMILES ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Clearing_type,Clearing,num_C,num_H,num_N,prohibited\n";
+print "#SMILES ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Dhm,Dhm_type,Dhp,Dhp_type,Clearing_type,Clearing,num_C,num_H,num_N,prohibited\n";
 
 my $prev_line="";
 my $smiles = "";
@@ -182,7 +187,7 @@ foreach my $line (@raw){
 
 		## begin a new entry
 		%arr = ("rac_en" => 0);
-		for my $ps ("Melting","Clearing","Bp","Cp","Ap","Sp","Np","Bm","Cm","Am","Sm","Nm"){
+		for my $ps ("Melting","Clearing","Bp","Cp","Ap","Sp","Np","Bm","Cm","Am","Sm","Nm","Dhm","Dhp"){
 			$arr{$ps} = -300;
 		}
 		for my $ps ("num_C","num_N","num_H"){

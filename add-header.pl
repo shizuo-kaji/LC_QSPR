@@ -23,7 +23,7 @@ my $linenum = 1;
 foreach my $pline (@csv) {
 	if($linenum==1){
 		$pline =~ s/^(.+?),//;  # remove the first entry
-		print "ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Clearing_type,Clearing,num_C,num_H,num_N,prohibited,".$pline;
+		print "ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Dhm,Dhmtype,Dhp,Dhptype,Clearing_type,Clearing,num_C,num_H,num_N,prohibited,".$pline;
 	}else{
 		$pline =~ s/\"//g;
 		$pline =~ s/\t/ /g;
