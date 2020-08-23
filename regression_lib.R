@@ -131,7 +131,8 @@ prepare_prediction <- function(target){
   varcol <<- colnames(dat) %in% expvar
   f <<- as.formula(paste(paste(target, collapse=" + "),paste(expvar, collapse=" + "), sep=" ~ "))
   n <- nchar(target)
-  if(n<4 && (substr(target,n,n)=="m" || substr(target,n,n)=="p")){
+  if((n<4 && (substr(target,n,n)=="m" || substr(target,n,n)=="p")) || (target=="Clearing") || (target=="Melting")){
+    is_regression <<- T
     ## remove rows where the target attribute is absent
     dat <<- dat[!is.na(dat[[target]]),]
     # remove rows with target < kelv or target > 800
@@ -139,6 +140,8 @@ prepare_prediction <- function(target){
     dat <<- dat[dat[[target]] <= 800,] 
     # remove rows with target = 0 as they are not reliable
     dat <<- dat[dat[[target]]!=0,]
+  }else{
+    is_regression <<- F
   }
 }
 ############## End of function definition ####################

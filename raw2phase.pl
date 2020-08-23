@@ -81,6 +81,10 @@ sub analysePhase {
 			$arr{"Clearing_type"} = 3;
 			$arr{"Clearing"} = $1;
 			$updated = 1;
+		}elsif ($pline =~ /\s+(-?\d+(\.\d+)?)\s+dec/){
+			$arr{"Clearing_type"} = 4;
+			$arr{"Clearing"} = $1;
+			$updated = 1;
 		}elsif ($pline =~ /\sis/){
 			$arr{"Clearing_type"} = 1;
 		}elsif ($pline =~ /\sex/){
