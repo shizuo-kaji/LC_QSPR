@@ -61,7 +61,7 @@ lpnorm <- function(x,p){
 }
 
 ## plot regression graph: truth,pred_mean,pred_high,pred_low
-plotpred <- function(vals,title="",sort=TRUE){
+plotpred <- function(vals,title="",sort=TRUE,ymin=0,ymax=350){
   # sort
   if(sort){
     sortlist <- order(vals[[1]])
@@ -124,13 +124,14 @@ plottab <- function(prediction,truth,title=""){
 }
 
 ## prepare for regression; set variables and formula
-prepare_prediction <- function(target){
+prepare_prediction <- function(target,remove_monotropic=FALSE){
   target <<- target
   expvar <<- setdiff(colnames(dat), nonvar)
   targetcol <<- colnames(dat) %in% target
   varcol <<- colnames(dat) %in% expvar
   f <<- as.formula(paste(paste(target, collapse=" + "),paste(expvar, collapse=" + "), sep=" ~ "))
   n <- nchar(target)
+  lt <- substr(target,1,1)
   if((n<4 && (substr(target,n,n)=="m" || substr(target,n,n)=="p")) || (target=="Clearing") || (target=="Melting")){
     is_regression <<- T
     ## remove rows where the target attribute is absent
@@ -142,6 +143,9 @@ prepare_prediction <- function(target){
     dat <<- dat[dat[[target]]!=0,]
   }else{
     is_regression <<- F
+  }
+  if(remove_monotropic){
+    dat <<- dat[dat[[paste0(lt,"m")]] < dat[[paste0(lt,"p")]],]
   }
 }
 ############## End of function definition ####################

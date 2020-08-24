@@ -20,18 +20,15 @@ nonvar <- c(
   "Clearing_type","Clearing","num_C","num_H","num_N","prohibited","group"
 )
 kelv = -273.15
-## target value bounds for graph drawing
-ymin <- 0
-ymax <- 350
 
-## 1) ############ Start here ##################################
+## 1) ############ preprocessing ##################################
+## if you already performed preprocessing and 
+## have the saved rds file, you can skip to 2)
+
 ## Set the working directory
 #setwd("data")
 
-## data file loading
-## load from compressed R data file: you can skip to 2)
-dat <- readRDS("d:/ml_res/desc_NR.rds")
-
+## load descriptors
 #dat <- readcsv("desc_sample.csv")
 dat <- readcsv("d:/ml_res/desc_all.csv")
 dat <- readRDS("d:/ml_res/desc_all.rds")
@@ -39,9 +36,6 @@ dat <- readRDS("d:/ml_res/desc_all.rds")
 #dat$group=1
 #dat <- rbind(dat,data.frame(readcsv("NR_en.csv"),group=2)) 
 #saveRDS(dat,"d:/ml_res/desc_all.rds")
-
-###############################
-### data preprocessing
 
 ###### data selection
 ## select by ID
@@ -95,24 +89,17 @@ dat <- data.frame(dat[,which(names(dat) %in% nonvar)],
 
 
 #### 2) #############################################
+# load preprocessed data file
+dat <- readRDS("d:/ml_res/desc_NR.rds")
 
 ## choose one variable to be predicted
-target <- "Clearing"
+prepare_prediction("Clearing")
 #dat <- dat[dat$Clearing_type==1,]
 
-target <- "Melting"
+prepare_prediction("Melting")
 dat <- dat[dat$Melting_type==1,]   # remove glass (Tg)
 
-## for Nm, remove monotropic
-#target <- "Np"
-#dat <- dat[dat$Nm < dat$Np,]
-#dat <- dat[dat$Nptype==2,]
-
-#target <- "Dhp"
-#dat <- dat[dat$Dhm < dat$Dhp,]
-
-## setting variables
-prepare_prediction(target)
+prepare_prediction("Ap",remove_monotropic = T)
 
 ## save the preprocessed data to a csv file
 #write.csv(file="PhCN-processed.csv", na.omit(dat), row.names = FALSE)
@@ -216,9 +203,7 @@ dev.off()
 library(lightgbm)
 
 dat <- readRDS("d:/ml_res/desc_NR.rds")
-target <- "Nptype"
-prepare_prediction(target)
-dat <- dat[dat$Nm < dat$Np,]
+prepare_prediction("Aptype",remove_monotropic = F)
 
 if(is_regression){
   params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
@@ -260,9 +245,9 @@ for(i in 1:folds){
     prediction <- rbind(prediction,
                         data.frame(
                           ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                          pred=max.col(p, ties.method = "last")-1,
-                          prob0=p[,1],prob1=p[,2],prob2=p[,3],
-                          truth=t))
+                          pred=max.col(p, ties.method = "last")-1,truth=t,
+                          prob0=p[,1],prob1=p[,2],prob2=p[,3]
+                          ))
   }  
 }
 
@@ -272,8 +257,10 @@ if(is_regression){
   # error ratio
   p <- prediction$ratio
 #  plotsort( p )
-  quantile(p,c(0.05,0.1,0.5,0.9,0.95))
+  print(quantile(p,c(0.05,0.1,0.5,0.9,0.95)))
+  png(paste0("hist_lgb_",target,".png"), width = 1024, height = 600)
   hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
+  dev.off()
   ## prediction results will be written to a csv: open it with, e.g., excel to see the results
   write.csv(file=paste0("pred_lgb_",target,".csv"), prediction, row.names = FALSE)
 }else{
@@ -287,7 +274,7 @@ if(is_regression){
 
 ## variable importance
 importance <- lgb.importance(model = bst[[1]])
-png(paste0("hist_lgb_",target,".png"), width = 1024, height = 600)
+png(paste0("importance_lgb_",target,".png"), width = 1024, height = 600)
 lgb.plot.importance(importance, top_n = 20L, measure = "Gain", left_margin = 10L, cex = NULL)
 dev.off()
 
