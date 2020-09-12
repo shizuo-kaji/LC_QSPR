@@ -36,7 +36,7 @@ and execute it. Wait for some time and you will obtain *desc_sample.csv*.
 
 - (On Unix/Mac)
     - create an smi file combining the information of the above files (TruthTable_sample.txt is optional)
-        > perl raw2phase.pl smiles_sample.txt raw_sample.txt TruthTable_sample.txt >! sample.smi
+        > perl raw2phase.pl smiles_sample.txt raw_sample.txt TruthTable_sample.txt > sample.smi
 
      - compute descriptors using mordred (takes time, and may produce some ignorable errors)
 

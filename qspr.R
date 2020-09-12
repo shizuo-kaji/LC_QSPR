@@ -2,7 +2,7 @@
 #
 #                by S. Kaji
 #                Aug. 2017
-#
+#               (last updated 11 Sep. 2020)
 #######################################
 
 ## load necessary packages
@@ -11,31 +11,38 @@
 #install.packages("stringi", type="source")
 #devtools::install_github("hoxo-m/pforeach")
 
+###### installation of lightGBM
+##https://github.com/microsoft/LightGBM/tree/master/R-package
+#PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r-cran.tar.gz"
+#remotes::install_url(PKG_URL, INSTALL_OPTS = "--no-multiarch")
+
+## binary installation
+#PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r40-windows.zip"
+#local_file <- paste0("lightgbm.", tools::file_ext(PKG_URL))
+#download.file(  url = PKG_URL  , destfile = local_file)
+#install.packages(  pkgs = local_file  , type = "binary"  , repos = NULL)
+
 source("regression_lib.R")
 
-## variables which are not used for prediction
-nonvar <- c(
-  "ID","SMILES","Phases","rac_en","Melting","Melting_type",
-  "Cmtype","Cm","Cptype","Cp","Amtype","Am","Aptype","Ap","Bmtype","Bm","Bptype","Bp","Smtype","Sm","Sptype","Sp","Nmtype","Nm","Nptype","Np","Dhmtype","Dhm","Dhptype","Dhp",
-  "Clearing_type","Clearing","num_C","num_H","num_N","prohibited","group"
-)
-kelv = -273.15
+## Set the working directory
+#setwd("data")
+
+## set the following appropriately
+descriptor_csv <- "desc_sample.csv"
+descriptor_csv <- "d:/ml_res/desc_all.csv"
+preprocessed_rds <- "d:/ml_res/desc_all.rds"
+
 
 ## 1) ############ preprocessing ##################################
 ## if you already performed preprocessing and 
 ## have the saved rds file, you can skip to 2)
 
-## Set the working directory
-#setwd("data")
-
 ## load descriptors
-#dat <- readcsv("desc_sample.csv")
-dat <- readcsv("d:/ml_res/desc_all.csv")
-dat <- readRDS("d:/ml_res/desc_all.rds")
+dat <- readcsv(descriptor_csv)
+#dat <- readRDS("d:/ml_res/desc_all.rds")
 ## add more data
 #dat$group=1
 #dat <- rbind(dat,data.frame(readcsv("NR_en.csv"),group=2)) 
-#saveRDS(dat,"d:/ml_res/desc_all.rds")
 
 ###### data selection
 ## select by ID
@@ -59,7 +66,6 @@ dat <- dat[(dat$num_C+dat$num_N)>=12,]
 
 ### add some factor variables
 #dat[,rac_en:=as.factor(dat$rac_en)]
-#LCexist=as.factor(apply(data.frame(dat$Cexist,dat$Aexist,dat$Nexist),1,max))
 
 ########## missing value handling
 ## Impute missing values
@@ -71,43 +77,183 @@ dat <- dat[(dat$num_C+dat$num_N)>=12,]
 ## remove rows with NA
 #dat <- na.omit(dat)
 ## remove columns with NA
-dat <- dat[, !apply(dat, 2, function(x) any(is.na(x)) )]
+#dat <- dat[, !apply(dat, 2, function(x) any(is.na(x)) )]
 ## remove columns with constant value
-dat <- dat[, !apply(dat, 2, function(x) length(unique(x)) == 1 )]
+#dat <- dat[, !apply(dat, 2, function(x) length(unique(x)) == 1 )]
 ## remove columns with zero variance
-dat_sd <- apply(dat, 2, sd) 
-dat <- dat[, (!is.na(dat_sd) & dat_sd>1e-24) | (colnames(dat) %in% nonvar)]
+#dat_sd <- apply(dat, 2, sd) 
+#dat <- dat[, (!is.na(dat_sd) & dat_sd>1e-24) | (colnames(dat) %in% nonvar)]
 
-## scale for regression
-dat <- data.frame(dat[,which(names(dat) %in% nonvar)],
-                  scale(dat[,-which(names(dat) %in% nonvar)]))
+## scaling data: not necessary for tree-based models
+dat <- data.frame(dat[,which(names(dat) %in% nonvar)],scale(dat[,-which(names(dat) %in% nonvar)]))
 
 ####
 ## save data into a native R data format for faster loading for next time
-#saveRDS(dat,"desc_CN12.rds")
-#saveRDS(dat,"d:/ml_res/desc_NR.rds")
+saveRDS(dat,preprocessed_rds)
 
 
 #### 2) #############################################
+
+library(lightgbm)
+
 # load preprocessed data file
-dat <- readRDS("d:/ml_res/desc_NR.rds")
+dat <- readRDS(preprocessed_rds)
 
 ## choose one variable to be predicted
-prepare_prediction("Clearing")
-#dat <- dat[dat$Clearing_type==1,]
+#prepare_prediction("Clearing")
 
 prepare_prediction("Melting")
 dat <- dat[dat$Melting_type==1,]   # remove glass (Tg)
 
-prepare_prediction("Ap",remove_monotropic = T)
+prepare_prediction("Nm",remove_monotropic = T)
 
-## save the preprocessed data to a csv file
-#write.csv(file="PhCN-processed.csv", na.omit(dat), row.names = FALSE)
+prepare_prediction("Ntype")
 
-##############################################################################
+if(is_regression){
+  params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+}else{
+  params <- list(objective="multiclass", metric="multi_logloss",num_class=length(unique(dat[[target]])),lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+}
+folds <- 5
+bst <- list()
+for(i in 1:folds){  ## cross validation
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+#  testidx <- which(dat$group==2)  
+  dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
+  dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
+  #bst[[i]] <- lgb.cv(params, dtrain, 10, nfold=5, min_data=1, learning_rate=1, early_stopping_rounds=80)
+  bst[[i]] <- lgb.train(params, dtrain, 
+#                   device_type="gpu", 
+                   seed = 42,force_col_wise=T,
+                   num_leaves=2^4,  # should be less than 2^max_depth
+                   colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                   nrounds=20000, eval_freq=500, min_data=1, learning_rate=0.1, 
+                   early_stopping_rounds=1000,   # set to 100 for quick test
+                   valids=list(test=dtest))
+}
+#saveRDS(bst,paste0(target,"_lgb.rds"))
 
+prediction <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+#  testidx <- which(dat$group==2)  
+  p <- predict(bst[[i]], as.matrix(dat[testidx,varcol]),reshape=T)
+  t <- dat[testidx,target]
+  if(is_regression){
+    prediction <- rbind(prediction,
+                        data.frame(
+                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                          pred=p, truth=t, error=p-t,
+                          ratio=abs(p-t)/(t-kelv)))
+  }else{
+    prediction <- rbind(prediction,
+                        data.frame(
+                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                          pred=as.factor(max.col(p, ties.method = "last")-1),truth=as.factor(t),
+                          prob0=p[,1],prob1=p[,2],prob2=p[,3]
+                          ))
+  }  
+}
+
+
+if(is_regression){
+  # plot prediction vs truth
+  plotpred(data.frame(prediction$pred,prediction$truth),paste0("lighGBM:",target),sort=T)
+  # error ratio
+  p <- prediction$ratio
+#  plotsort( p )
+  print(quantile(p,c(0.05,0.1,0.3,0.5,0.7,0.9,0.95)))
+  png(paste0("hist_lgb_",target,".png"), width = 1024, height = 600)
+  hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
+  dev.off()
+  ## prediction results will be written to a csv: open it with, e.g., excel to see the results
+  write.csv(file=paste0("pred_lgb_",target,".csv"), prediction, row.names = FALSE)
+}else{
+  ## classification results
+  # types: 0 means "not exist", 1 means "exist", 2 means "(*)"; e.g., N* means cholesteric
+  print(confusionMatrix(factor(prediction$pred),
+                  factor(prediction$truth),
+                  mode = "everything"))
+  write.csv(file=paste0("clas_lgb_",target,".csv"), prediction, row.names = FALSE)
+}
+
+## variable importance
+for(i in 1:folds){
+  il <- lgb.importance(model = bst[[i]])
+  png(paste0("importance_lgb_",target,"_",i,".png"), width = 1024, height = 600)
+  lgb.plot.importance(il, top_n = 20L, measure = "Gain", left_margin = 10L, cex = NULL)
+  dev.off()
+  if(i==1){
+    importance <- data.frame(il)
+  }else{
+    importance <- full_join(importance, il, by="Feature")
+  }
+}
+write.csv(file=paste0("importance_lgb_",target,".csv"), importance, row.names = FALSE)
+
+
+## correlation between importance of variables
+imp1 = read.csv("importance_lgb_Nm.csv", header=TRUE, sep = ",", stringsAsFactors = FALSE)
+mean = apply(imp1[,idx],1,mean)
+imp2 = read.csv("importance_lgb_Np.csv", header=TRUE, sep = ",", stringsAsFactors = FALSE)
+mean2 = apply(imp2[,idx],1,mean)
+imp3 = read.csv("importance_lgb_Ntype.csv", header=TRUE, sep = ",", stringsAsFactors = FALSE)
+mean3 = apply(imp3[,idx],1,mean)
+
+imp <- full_join(imp1,imp2, by ="Feature")
+imp <- full_join(imp,imp3, by ="Feature")
+idx <- list(c(2,5,8,11,14),c(17,20,23,26,29),c(32,35,38,41,44))
+
+c11 <- c()
+for(i in idx1){
+  c11 <- c(c11,apply(imp[,idx1],2,cor,imp[[i]],use="complete.obs"))
+}
+names(c11) <- NULL
+c12 <- c()
+for(i in idx2){
+  c12 <- c(c12,apply(imp[,idx1],2,cor,imp[[i]],use="complete.obs"))
+}
+names(c12) <- NULL
+c13 <- c()
+for(i in idx3){
+  c13 <- c(c13,apply(imp[,idx1],2,cor,imp[[i]],use="complete.obs"))
+}
+names(c13) <- NULL
+
+boxplot(c11,c12,c13, names=c("mm","mp","mc"))
+
+###### hyper-parameter search
+library(data.table)
+grid_search <- expand.grid(Depth = 2:8,L1 = 0:5,L2 = 0:5)
+model <- list()
+perf <- numeric(nrow(grid_search))
+for (i in 1:nrow(grid_search)) {
+  model[[i]] <- lgb.train(list(objective = "regression",
+                               metric = "l2",
+                               lambda_l1 = grid_search[i, "L1"],
+                               lambda_l2 = grid_search[i, "L2"],
+                               max_depth = grid_search[i, "Depth"]),
+                          dtrain,
+                          num_leaves=2^3,
+#                          device_type="gpu", 
+                          seed = 42,
+                          colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                          nrounds=10000, eval_freq=200, min_data=1, learning_rate=0.1, 
+                          early_stopping_rounds=80, valids=list(test=dtest))
+  perf[i] <- min(rbindlist(model[[i]]$record_evals$test$l2))
+}
+cat("Model ", which.min(perf), " is lowest loss: ", min(perf), sep = "","\n")
+print(grid_search[which.min(perf), ])
+
+
+#########################################
 ## XGBoost
 library(xgboost)
+
+dat <- readRDS(preprocessed_rds)
+prepare_prediction("Np",remove_monotropic = T)
+prepare_prediction("Nptype",remove_monotropic = F)
+
 bst <- list()
 folds <- 5
 if(is_regression){
@@ -118,22 +264,22 @@ if(is_regression){
 # model training
 for(i in 1:folds){  ## cross validation
   testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
-#  testidx <- which(dat$group==2)  
+  #  testidx <- which(dat$group==2)  
   dtrain = xgb.DMatrix(data =  as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
   dtest = xgb.DMatrix(data =  as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
   watchlist = list(train=dtrain, test=dtest)
   bst[[i]] = xgb.train(params=params, data = dtrain, booster="gbtree",
-                  max.depth = 6, 
-                  eta = 0.05,  # learning rate
-                  alpha = 1.0, # L1
-                  lambda = 1.0, # L2
-#                  nthread = 8, # automatically set
-                  nround = 10000, 
-                  colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8, gamma = 2,
-                  watchlist = watchlist, 
-                  early_stopping_rounds = 1000,  # set to 100 for quick test
-                  print_every_n = 500,
-                  )
+                       max.depth = 6, 
+                       eta = 0.05,  # learning rate
+                       alpha = 1.0, # L1
+                       lambda = 1.0, # L2
+                       #                  nthread = 8, # automatically set
+                       nround = 10000, 
+                       colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8, gamma = 2,
+                       watchlist = watchlist, 
+                       early_stopping_rounds = 1000,  # set to 100 for quick test
+                       print_every_n = 500,
+  )
 }
 
 # prediction using the learned model
@@ -141,16 +287,16 @@ for(i in 1:folds){  ## cross validation
 prediction <- list()
 for(i in 1:folds){
   testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
-#  testidx <- which(dat$group==2)  
+  #  testidx <- which(dat$group==2)  
   dtest = xgb.DMatrix(data =  as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
   p <- predict(bst[[i]], dtest, reshape=T)
   t <- dat[testidx,target]
   if(is_regression){
     prediction <- rbind(prediction,
-                      data.frame(
-                      ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                      pred=p, truth=t, error=p-t,
-                      ratio=abs(p-t)/(t-kelv)))
+                        data.frame(
+                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                          pred=p, truth=t, error=p-t,
+                          ratio=abs(p-t)/(t-kelv)))
   }else{
     prediction <- rbind(prediction,
                         data.frame(
@@ -176,8 +322,8 @@ if(is_regression){
 }else{
   # types: 0 means "not exist", 1 means "exist", 2 means "(*)"; e.g., N* means cholesteric
   print(confusionMatrix(factor(prediction$pred),
-                  factor(prediction$truth),
-                  mode = "everything"))
+                        factor(prediction$truth),
+                        mode = "everything"))
   write.csv(file=paste0("clas_",target,".csv"), prediction, row.names = FALSE)
 }
 saveRDS(bst,paste0(target,".rds"))
@@ -188,119 +334,6 @@ importance <- xgb.importance(model = bst[[1]])
 png(paste0("importance_",target,".png"), width = 1024, height = 600)
 xgb.plot.importance(head(importance,20))
 dev.off()
-
-################
-##https://github.com/microsoft/LightGBM/tree/master/R-package
-#PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r-cran.tar.gz"
-#remotes::install_url(PKG_URL, INSTALL_OPTS = "--no-multiarch")
-
-## binary installation
-#PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r40-windows.zip"
-#local_file <- paste0("lightgbm.", tools::file_ext(PKG_URL))
-#download.file(  url = PKG_URL  , destfile = local_file)
-#install.packages(  pkgs = local_file  , type = "binary"  , repos = NULL)
-
-library(lightgbm)
-
-dat <- readRDS("d:/ml_res/desc_NR.rds")
-prepare_prediction("Aptype",remove_monotropic = F)
-
-if(is_regression){
-  params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
-}else{
-  params <- list(objective="multiclass", metric="multi_logloss",num_class=length(unique(dat[[target]])),lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
-}
-folds <- 5
-bst <- list()
-for(i in 1:folds){  ## cross validation
-  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
-#  testidx <- which(dat$group==2)  
-  dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
-  dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
-  #bst[[i]] <- lgb.cv(params, dtrain, 10, nfold=5, min_data=1, learning_rate=1, early_stopping_rounds=80)
-  bst[[i]] <- lgb.train(params, dtrain, 
-#                   device_type="gpu", 
-                   seed = 42,force_col_wise=T,
-                   num_leaves=2^4,  # should be less than 2^max_depth
-                   colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
-                   nrounds=10000, eval_freq=500, min_data=1, learning_rate=0.1, 
-                   early_stopping_rounds=1000,   # set to 100 for quick test
-                   valids=list(test=dtest))
-}
-#saveRDS(bst,paste0(target,"_lgb.rds"))
-
-prediction <- list()
-for(i in 1:folds){
-  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
-#  testidx <- which(dat$group==2)  
-  p <- predict(bst[[i]], as.matrix(dat[testidx,varcol]),reshape=T)
-  t <- dat[testidx,target]
-  if(is_regression){
-    prediction <- rbind(prediction,
-                        data.frame(
-                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                          pred=p, truth=t, error=p-t,
-                          ratio=abs(p-t)/(t-kelv)))
-  }else{
-    prediction <- rbind(prediction,
-                        data.frame(
-                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                          pred=max.col(p, ties.method = "last")-1,truth=t,
-                          prob0=p[,1],prob1=p[,2],prob2=p[,3]
-                          ))
-  }  
-}
-
-if(is_regression){
-  # plot prediction vs truth
-  plotpred(data.frame(prediction$pred,prediction$truth),paste0("lighGBM:",target),sort=T)
-  # error ratio
-  p <- prediction$ratio
-#  plotsort( p )
-  print(quantile(p,c(0.05,0.1,0.5,0.9,0.95)))
-  png(paste0("hist_lgb_",target,".png"), width = 1024, height = 600)
-  hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
-  dev.off()
-  ## prediction results will be written to a csv: open it with, e.g., excel to see the results
-  write.csv(file=paste0("pred_lgb_",target,".csv"), prediction, row.names = FALSE)
-}else{
-  ## classification results
-  # types: 0 means "not exist", 1 means "exist", 2 means "(*)"; e.g., N* means cholesteric
-  print(confusionMatrix(factor(prediction$pred),
-                  factor(prediction$truth),
-                  mode = "everything"))
-  write.csv(file=paste0("clas_lgb_",target,".csv"), prediction, row.names = FALSE)
-}
-
-## variable importance
-importance <- lgb.importance(model = bst[[1]])
-png(paste0("importance_lgb_",target,".png"), width = 1024, height = 600)
-lgb.plot.importance(importance, top_n = 20L, measure = "Gain", left_margin = 10L, cex = NULL)
-dev.off()
-
-###### hyper-parameter search
-library(data.table)
-grid_search <- expand.grid(Depth = 2:8,L1 = 0:5,L2 = 0:5)
-model <- list()
-perf <- numeric(nrow(grid_search))
-for (i in 1:nrow(grid_search)) {
-  model[[i]] <- lgb.train(list(objective = "regression",
-                               metric = "l2",
-                               lambda_l1 = grid_search[i, "L1"],
-                               lambda_l2 = grid_search[i, "L2"],
-                               max_depth = grid_search[i, "Depth"]),
-                          dtrain,
-                          num_leaves=2^3,
-#                          device_type="gpu", 
-                          seed = 42,
-                          colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
-                          nrounds=10000, eval_freq=200, min_data=1, learning_rate=0.1, 
-                          early_stopping_rounds=80, valids=list(test=dtest))
-  perf[i] <- min(rbindlist(model[[i]]$record_evals$test$l2))
-}
-cat("Model ", which.min(perf), " is lowest loss: ", min(perf), sep = "","\n")
-print(grid_search[which.min(perf), ])
-
 
 #################
 # I have only fixed up to here.

@@ -19,6 +19,16 @@ library(gbm)
 library(caret)
 library(dplyr)  
 
+
+## variables which are not used for prediction
+nonvar <- c(
+  "ID","SMILES","Phases","rac_en","Melting","Melting_type",
+  "Ctype","Cm","Cp","Atype","Am","Ap","Btype","Bm","Bp",
+  "Ntype","Nm","Np","Dtype","Dm","Dp","Stype","Sm","Sp",
+  "Clearing_type","Clearing","num_C","num_H","num_N","prohibited","group"
+)
+kelv = -273.15
+
 ############## function definition ####################
 ## load csv file
 readcsv <- function(filename, header=TRUE){
@@ -131,21 +141,34 @@ prepare_prediction <- function(target,remove_monotropic=FALSE){
   varcol <<- colnames(dat) %in% expvar
   f <<- as.formula(paste(paste(target, collapse=" + "),paste(expvar, collapse=" + "), sep=" ~ "))
   n <- nchar(target)
-  lt <- substr(target,1,1)
-  if((n<4 && (substr(target,n,n)=="m" || substr(target,n,n)=="p")) || (target=="Clearing") || (target=="Melting")){
+  lt <- substr(target,1,1) # phase name
+  mp <- substr(target,n,n) # p or m
+
+  ## remove ambiguous (X can be the target)
+  dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Xtype==0,] 
+  ## remove ambiguous (S can be A,B,C,C*)
+  if(lt=="A"|| lt=="B" || lt=="C"){
+    dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Stype==0,] 
+  }else if(lt=="D"){   ## remove ambiguous (Y can be Dh, Dr, ...)
+    dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Ytype==0,] 
+  }
+
+  if((n<4 && (mp=="m" || mp=="p")) || (target=="Clearing") || (target=="Melting")){
     is_regression <<- T
-    ## remove rows where the target attribute is absent
-    dat <<- dat[!is.na(dat[[target]]),]
-    # remove rows with target < kelv or target > 800
-    dat <<- dat[dat[[target]] >= kelv,] 
-    dat <<- dat[dat[[target]] <= 800,] 
-    # remove rows with target = 0 as they are not reliable
-    dat <<- dat[dat[[target]]!=0,]
+    #dat <<- dat[!is.na(dat[[target]]),]
+    # remove rows with target < kelv or target > 800 and with target = 0 as they are not reliable
+    dat <<- dat[dat[[target]] >= kelv & dat[[target]] <= 800 & dat[[target]]!=0,] 
   }else{
     is_regression <<- F
   }
-  if(remove_monotropic){
+
+  if(remove_monotropic && is_regression){
     dat <<- dat[dat[[paste0(lt,"m")]] < dat[[paste0(lt,"p")]],]
+    if(mp=="m"){
+      dat <<- dat[dat[[paste0(lt,"p")]] >= kelv & dat[[paste0(lt,"p")]] <= 800 & dat[[paste0(lt,"p")]]!=0,] 
+    }else if(mp=="p"){
+      dat <<- dat[dat[[paste0(lt,"m")]] >= kelv & dat[[paste0(lt,"m")]] <= 800 & dat[[paste0(lt,"m")]]!=0,] 
+    }
   }
 }
 ############## End of function definition ####################
