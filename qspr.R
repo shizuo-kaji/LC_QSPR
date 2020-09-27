@@ -11,8 +11,7 @@
 #install.packages("stringi", type="source")
 #devtools::install_github("hoxo-m/pforeach")
 
-###### installation of lightGBM
-##https://github.com/microsoft/LightGBM/tree/master/R-package
+##installation of lightGBM
 #PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0rc1/lightgbm-3.0.0-1-r-cran.tar.gz"
 #remotes::install_url(PKG_URL, INSTALL_OPTS = "--no-multiarch")
 
@@ -22,6 +21,8 @@
 #download.file(  url = PKG_URL  , destfile = local_file)
 #install.packages(  pkgs = local_file  , type = "binary"  , repos = NULL)
 
+
+###########################
 source("regression_lib.R")
 
 ## Set the working directory
@@ -29,9 +30,7 @@ source("regression_lib.R")
 
 ## set the following appropriately
 descriptor_csv <- "desc_sample.csv"
-descriptor_csv <- "d:/ml_res/desc_all.csv"
 preprocessed_rds <- "d:/ml_res/desc_all.rds"
-
 
 ## 1) ############ preprocessing ##################################
 ## if you already performed preprocessing and 
@@ -52,17 +51,20 @@ dat <- readcsv(descriptor_csv)
 #matched <- grep('Cr[[:digit:][:space:]\\.\\?]+C[[:digit:][:space:]\\.\\?]+A[[:digit:][:space:]\\.\\?]+N[[:digit:][:space:]\\.\\?]+is',dat$Phases)
 #matched <- grep('[CB][[:digit:][:space:]\\*\\.\\?]+A[[:digit:][:space:]\\*\\.\\?]+[Ni]',dat$Phases)
 #matched <- grep('[CB][[:digit:][:space:]\\*\\.\\?]+A',dat$Phases)
-#matched <- grep('A[[:digit:][:space:]\\*\\.\\?]+[Ni]',dat$Phases)
+#matched <- grep('A[[:dig##it:][:space:]\\*\\.\\?]+[Ni]',dat$Phases)
 #dat <- dat[matched,]
+
+## check SMILES and formula coincides
+#mismatch_formula <- dat[(dat$num_C != dat$nC) | (dat$num_N != dat$nN) | (dat$num_H != dat$nH),c("ID","SMILES","Phases","num_C","nC","num_N","nN","num_H","nH")]
+#write.csv(file=paste0("mismatch_formula.csv"), mismatch_formula, row.names = FALSE)
+## remove mismatched
+dat <- dat[(dat$num_C == dat$nC) & (dat$num_N == dat$nN) & (dat$num_H == dat$nH),]
 
 ## select only molecules with #C+#N >= 12 (remove small and non-organic)
 dat <- dat[(dat$num_C+dat$num_N)>=12,]
 
 ## select thoes do not contain prohibited atoms
 #dat <- dat[dat$prohibited == 0,]
-
-## remove chiral
-#dat <- dat[dat$rac.en=="",] 
 
 ### add some factor variables
 #dat[,rac_en:=as.factor(dat$rac_en)]
@@ -84,7 +86,7 @@ dat <- dat[(dat$num_C+dat$num_N)>=12,]
 #dat_sd <- apply(dat, 2, sd) 
 #dat <- dat[, (!is.na(dat_sd) & dat_sd>1e-24) | (colnames(dat) %in% nonvar)]
 
-## scaling data: not necessary for tree-based models
+## scaling data
 dat <- data.frame(dat[,which(names(dat) %in% nonvar)],scale(dat[,-which(names(dat) %in% nonvar)]))
 
 ####
@@ -92,9 +94,10 @@ dat <- data.frame(dat[,which(names(dat) %in% nonvar)],scale(dat[,-which(names(da
 saveRDS(dat,preprocessed_rds)
 
 
-#### 2) #############################################
+#### 2) ###### prediction with lightGBM ###################
 
 library(lightgbm)
+packageVersion("lightgbm")
 
 # load preprocessed data file
 dat <- readRDS(preprocessed_rds)
@@ -102,21 +105,28 @@ dat <- readRDS(preprocessed_rds)
 ## choose one variable to be predicted
 #prepare_prediction("Clearing")
 
-prepare_prediction("Melting")
-dat <- dat[dat$Melting_type==1,]   # remove glass (Tg)
+#prepare_prediction("Melting")
+#dat <- dat[dat$Melting_type==1,]   # remove glass (Tg)
 
-prepare_prediction("Nm",remove_monotropic = T)
+prepare_prediction("Np",remove_monotropic = T)
 
-prepare_prediction("Ntype")
+prepare_prediction("Ntype2")
 
+folds <- 5
 if(is_regression){
   params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
 }else{
-  params <- list(objective="multiclass", metric="multi_logloss",num_class=length(unique(dat[[target]])),lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+  n_class <- length(unique(dat[[target]]))
+  if(n_class==2){
+    params <- list(objective="binary", is_unbalance=F,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+  }else{
+    params <- list(objective="multiclass", metric="multi_logloss",num_class=n_class,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+  }
 }
-folds <- 5
-bst <- list()
 for(i in 1:folds){  ## cross validation
+  if(i==1){
+    bst <- list()
+  }
   testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
 #  testidx <- which(dat$group==2)  
   dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
@@ -131,10 +141,12 @@ for(i in 1:folds){  ## cross validation
                    early_stopping_rounds=1000,   # set to 100 for quick test
                    valids=list(test=dtest))
 }
-#saveRDS(bst,paste0(target,"_lgb.rds"))
+saveRDS(bst,paste0("lgb_",target,".rds"))
 
-prediction <- list()
 for(i in 1:folds){
+  if(i==1){
+    prediction <<- list()
+  }
   testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
 #  testidx <- which(dat$group==2)  
   p <- predict(bst[[i]], as.matrix(dat[testidx,varcol]),reshape=T)
@@ -146,26 +158,40 @@ for(i in 1:folds){
                           pred=p, truth=t, error=p-t,
                           ratio=abs(p-t)/(t-kelv)))
   }else{
-    prediction <- rbind(prediction,
-                        data.frame(
-                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
-                          pred=as.factor(max.col(p, ties.method = "last")-1),truth=as.factor(t),
-                          prob0=p[,1],prob1=p[,2],prob2=p[,3]
-                          ))
+    ps <- data.frame(
+      ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+      truth=as.factor(t)
+    )
+    if(n_class==2){
+      ps$pred <- 0
+      ps[p>0.5, "pred"] <- 1
+      ps$prob1=p      
+    }else{
+      ps$pred <- as.factor(max.col(p, ties.method = "last")-1)
+      for(i in 1:n_class){
+        ps[[paste0("prob",i-1)]] <- p[,i]
+      }
+    }
+    prediction <- rbind(prediction,ps)
   }  
 }
 
-
 if(is_regression){
   # plot prediction vs truth
-  plotpred(data.frame(prediction$pred,prediction$truth),paste0("lighGBM:",target),sort=T)
+  #plotpred(data.frame(prediction$pred,prediction$truth),paste0("lighGBM:",target),sort=T)
   # error ratio
   p <- prediction$ratio
 #  plotsort( p )
-  print(quantile(p,c(0.05,0.1,0.3,0.5,0.7,0.9,0.95)))
-  png(paste0("hist_lgb_",target,".png"), width = 1024, height = 600)
-  hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
-  dev.off()
+#  print(quantile(p,c(0.05,0.1,0.3,0.5,0.7,0.9,0.95)))
+  #hist(pmax( 0, pmin( p, 0.3)), freq=F, main="Histogram", xlab="error ratio")
+  bins <- 30
+  g <- ggplot(prediction, aes(x = ratio)) + geom_histogram(bins = bins, aes(y=..density.. / 100))+scale_y_continuous(labels = percent_format())
+  g <- g + stat_bin(aes(y = cumsum(cnt <<- ..count..) / sum(..count..)), geom = "line", bins = bins)
+#    scale_y_continuous(sec.axis = sec_axis(~ . / max(cnt), name = "percentage[%]"))
+  g <- g + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + xlim(0,0.25)
+  plot(g)
+  ggsave(paste0("hist_lgb_",target,".png"))
+  
   ## prediction results will be written to a csv: open it with, e.g., excel to see the results
   write.csv(file=paste0("pred_lgb_",target,".csv"), prediction, row.names = FALSE)
 }else{
@@ -174,15 +200,12 @@ if(is_regression){
   print(confusionMatrix(factor(prediction$pred),
                   factor(prediction$truth),
                   mode = "everything"))
-  write.csv(file=paste0("clas_lgb_",target,".csv"), prediction, row.names = FALSE)
+  write.csv(file=paste0("result/pred_lgb_",target,".csv"), prediction, row.names = FALSE)
 }
 
 ## variable importance
 for(i in 1:folds){
   il <- lgb.importance(model = bst[[i]])
-  png(paste0("importance_lgb_",target,"_",i,".png"), width = 1024, height = 600)
-  lgb.plot.importance(il, top_n = 20L, measure = "Gain", left_margin = 10L, cex = NULL)
-  dev.off()
   if(i==1){
     importance <- data.frame(il)
   }else{
@@ -193,34 +216,115 @@ write.csv(file=paste0("importance_lgb_",target,".csv"), importance, row.names = 
 
 
 ## correlation between importance of variables
-imp1 = read.csv("importance_lgb_Nm.csv", header=TRUE, sep = ",", stringsAsFactors = FALSE)
-mean = apply(imp1[,idx],1,mean)
-imp2 = read.csv("importance_lgb_Np.csv", header=TRUE, sep = ",", stringsAsFactors = FALSE)
-mean2 = apply(imp2[,idx],1,mean)
-imp3 = read.csv("importance_lgb_Ntype.csv", header=TRUE, sep = ",", stringsAsFactors = FALSE)
-mean3 = apply(imp3[,idx],1,mean)
-
-imp <- full_join(imp1,imp2, by ="Feature")
-imp <- full_join(imp,imp3, by ="Feature")
-idx <- list(c(2,5,8,11,14),c(17,20,23,26,29),c(32,35,38,41,44))
-
-c11 <- c()
-for(i in idx1){
-  c11 <- c(c11,apply(imp[,idx1],2,cor,imp[[i]],use="complete.obs"))
+cc <- c("Cm","Cp","Ctype2","Ctype3")
+#cc <- c("Nm","Np","Ntype2","Ntype3")
+idx <- list()
+for(i in 1:length(cc)){
+  q <- read.csv(paste0("importance_lgb_",cc[[i]],".csv"), header=TRUE, sep = ",", stringsAsFactors = FALSE)
+  if(i==1){
+    imp <- q
+  }else{
+    imp <- full_join(imp,q, by="Feature")
+  }
+  s = 15*(i-1)
+  idx[[i]] <- c(s+2,s+5,s+8,s+11,s+14)
 }
-names(c11) <- NULL
-c12 <- c()
-for(i in idx2){
-  c12 <- c(c12,apply(imp[,idx1],2,cor,imp[[i]],use="complete.obs"))
-}
-names(c12) <- NULL
-c13 <- c()
-for(i in idx3){
-  c13 <- c(c13,apply(imp[,idx1],2,cor,imp[[i]],use="complete.obs"))
-}
-names(c13) <- NULL
 
-boxplot(c11,c12,c13, names=c("mm","mp","mc"))
+cors <- list()
+for(k in 1:length(cc)){
+  for(j in k:length(cc)){
+    cs <- c()
+    for(i in idx[[j]]){
+      cs <- c(cs,apply(imp[,idx[[k]]],2,cor,imp[[i]],use="complete.obs"))
+    }
+    names(cs) <- NULL
+    cors[[paste0(cc[[k]],cc[[j]])]] <- cs
+  }
+}
+png(paste0("cor_importance_C.png"), width = 1200, height = 600)
+boxplot(cors)
+dev.off()
+
+
+## correlation of mean variable importance
+cc <- c("Np","Nm","Ntype2","Ntype3","Cp","Cm","Ctype2","Ctype3","Ap","Am","Atype","Bp","Bm","Btype","Dp","Dm","Dtype","Clearing","Melting")
+mean_imp = list()
+for(i in 1:length(cc)){
+  q <- read.csv(paste0("result/importance_lgb_",cc[[i]],".csv"), header=TRUE, sep = ",", stringsAsFactors = FALSE)
+  if(i==1){
+    imp <- q
+  }else{
+    imp <- full_join(imp,q, by="Feature")
+  }
+}
+for(i in 1:length(cc)){
+  j = 15*(i-1)
+  u = c(j+2,j+5,j+8,j+11,j+14)
+  mean_imp[[cc[[i]]]] = apply(imp[,u],1,mean)
+}
+mean_imp <- data.frame(mean_imp)
+
+target <- 'Nm'
+il <- data.table(Feature=imp$Feature, Gain=mean_imp[[target]])
+il <- head(il[order(il$Gain, decreasing =TRUE),],15)
+g <- ggplot(il, aes(x = reorder(Feature, Gain), y = Gain, fill = 0))
+g <- g + geom_bar(stat = "identity")+ coord_flip() +theme(legend.position = 'none') + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) 
+plot(g)
+ggsave(paste0("importance_lgb_",target,".png"))
+
+library(corrplot)
+library(reshape2)
+cormat <- round(cor(mean_imp, use="pairwise.complete.obs"),3)
+png(paste0("cor_imp_elip.png"), width = 1024, height = 600)
+corrplot(cormat, method="ellipse",tl.col="black",order="original")
+dev.off()
+melted_cormat <- melt(cormat)
+png(paste0("cor_imp_col.png"), width = 1024, height = 600)
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value))+geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  coord_fixed()+labs(x="",y="")
+dev.off()
+
+
+## error plot: provided by N. Nakano
+library(openxlsx)
+preds <- read.xlsx("prediction.xlsx")
+preds <- fread("pred_Np_relgcn.csv")
+
+preds$ratio_lgb <- abs(preds$pred_lgb-preds$truth)/(preds$truth-kelv)
+preds$ratio_relgcn <- abs(preds$pred_relgcn-preds$truth)/(preds$truth-kelv)
+
+target1 <- "lgb"
+target2 <- "relgcn"
+df = na.omit(rbind(data.frame(ratio=preds[[paste0("ratio_",target1)]], group=target1), 
+                   data.frame(ratio=preds[[paste0("ratio_",target2)]], group=target2)))
+#df = na.omit(data.frame(ratio=preds[[paste0("ratio_",target)]], group=target))
+bins <- 30
+#  g <- ggplot(df, aes(x = ratio,  fill=group,group=group)) + geom_histogram(bins = bins, aes(y=..density.. / 100), alpha=0.6, position='identity')+scale_y_continuous(labels = percent_format())
+#  g <- g + stat_bin(aes(y = cumsum(cnt <<- ..count..) / sum(..count..), color=group,group=group), geom = "line", bins = bins)
+#  g <- g + theme(axis.title.x = element_blank(), axis.title.y = element_blank()) + xlim(0,0.25) +theme(legend.position = 'none')
+
+breaks = c(0, 0.25, 0.5, 0.75, 1.0)
+labels = c('0', '10%', '20%', '30%', '40%')
+g = ggplot(df, aes(x=ratio, fill=group, group=group)) +
+  geom_histogram(bins=bins, aes(y=..density../100*2.5), alpha=0.4, position='identity') +
+  scale_y_continuous(breaks=breaks, labels=labels, sec.axis=sec_axis(~., name='cumulative percentage', labels=percent_format())) +
+  stat_ecdf(geom='step', pad=FALSE, position='identity', aes(color=group), size=1.5) +
+  xlab('relative prediction error') +
+  ylab('percentage') +
+  #theme(axis.title.x=element_text(size=14), axis.title.y=element_text(size=14)) + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_text(size=14)) + 
+  theme(axis.text.x=element_text(size=12), axis.text.y=element_text(size=12)) + 
+  xlim(0, 0.25) +
+#    theme(legend.position='none')
+#  plot(g)
+ggsave(paste0("hist_",target1,".png"))
+
 
 ###### hyper-parameter search
 library(data.table)
@@ -244,6 +348,7 @@ for (i in 1:nrow(grid_search)) {
 }
 cat("Model ", which.min(perf), " is lowest loss: ", min(perf), sep = "","\n")
 print(grid_search[which.min(perf), ])
+
 
 
 #########################################
@@ -324,7 +429,7 @@ if(is_regression){
   print(confusionMatrix(factor(prediction$pred),
                         factor(prediction$truth),
                         mode = "everything"))
-  write.csv(file=paste0("clas_",target,".csv"), prediction, row.names = FALSE)
+  write.csv(file=paste0("pred_",target,".csv"), prediction, row.names = FALSE)
 }
 saveRDS(bst,paste0(target,".rds"))
 
@@ -334,6 +439,20 @@ importance <- xgb.importance(model = bst[[1]])
 png(paste0("importance_",target,".png"), width = 1024, height = 600)
 xgb.plot.importance(head(importance,20))
 dev.off()
+
+
+
+###########################################
+## save csv for chainer-chemistry
+folds=5
+target ='Ntype2'
+cols = c('SMILES','ID','Phases','Np','Nm','Ntype')
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  write.csv(file=paste0(target,"_train_",i,".csv"), dat[-testidx,cols], row.names = FALSE)
+  write.csv(file=paste0(target,"_test_",i,".csv"), dat[testidx,cols], row.names = FALSE)
+}
+
 
 #################
 # I have only fixed up to here.

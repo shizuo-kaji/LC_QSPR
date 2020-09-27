@@ -13,9 +13,10 @@ Currently, mordred requires an older version of networkx:
 
     > conda install networkx=2.3
 
-In stall Chainer
+Install Chainer and chainer-chemistry
 
-    > pip install chainer
+    > pip install chainer, chainer-chemistry
+
 
 If you are on Windows, install Perl by
 
@@ -48,9 +49,21 @@ and execute it. Wait for some time and you will obtain *desc_sample.csv*.
 
 
 
-### prediction
+### Prediction by R (lightGBM etc)
+
 - Open qspr.R in RStudio and load desc_sample.csv. The R script contains several regression and classification analysis. The scirpt is still very messy and needs to be cleaned.
 
+### Prediction by Chainer Chemistry
+- Prepare training and test datasets in the csv format. The file should contain SMILES and target value to be predicted. No descriptor information is needed. 
+
+    > python chainerChem.py -t train.csv -v test.csv -m relgcn -u 64 -c 8 -b 16 -l ColumnNameOfTargetValue -e 400
+
+Look at the help message
+
+    > python chainerChem -h
+
+
+### Prediction by MLP
 - To regress certain value or to classify using a neural network
 
     > python MLP.py -l 5 desc_sample.csv

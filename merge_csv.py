@@ -13,25 +13,28 @@ import pandas as pd
 def main():
     # command line argument parsing
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('dataset1', help='Path to data file')
-    parser.add_argument('dataset2', help='Path to data file')
-    parser.add_argument('output', help='csv file name')
+    parser.add_argument('datasets', nargs="*", help='Path to data file')
+    parser.add_argument('--output', '-o', default="merged.csv", help='csv file name')
 
     args = parser.parse_args()
 
     # read csv file
-    df1 = pd.read_csv(args.dataset1, header=0, index_col="ID")
-#    df1.reset_index(inplace=True)
-    df2 = pd.read_csv(args.dataset2, header=0, index_col="ID")
-#    df2.sort_values(by=["ID"], ascending=True, inplace=True)
-#    df2.reset_index(inplace=True)
+    for i,fn in enumerate(args.datasets):
+        print(fn)
+        if(i==0):
+            df = pd.read_csv(fn, header=0, index_col="ID")
+        else:
+            df2 = pd.read_csv(fn, header=0, index_col="ID")
+        #    df2.sort_values(by=["ID"], ascending=True, inplace=True)
+        #    df2.reset_index(inplace=True)
+            df = df.merge(df2, on="ID", how="outer", suffixes=('', '_2'), copy=False, sort=True)
+            df['SMILES'] = df['SMILES'].combine_first(df['SMILES_2'])
+            df['Phases'] = df['Phases'].combine_first(df['Phases_2'])
+#            df.drop(columns=["SMILES_2",'pred_Np_2'], inplace=True)
+            df.drop(columns=["SMILES_2","Phases_2"], inplace=True)
+            #    df1.sort_values(by=["ID"], ascending=True, inplace=True)
 
-    df1 = df1.merge(df2, on="ID", how="outer", suffixes=('', '_2'), copy=False, sort=True)
-    df1['SMILES'] = df1['SMILES'].combine_first(df1['SMILES_2'])
-    df1['Phases'] = df1['Phases'].combine_first(df1['Phases_2'])
-    df1.drop(columns=["SMILES_2","Phases_2"], inplace=True)
-#    df1.sort_values(by=["ID"], ascending=True, inplace=True)
-    df1.to_csv(args.output)
+    df.to_csv(args.output)
 
 #    i = 0
 #     for index, row in df1.iterrows():

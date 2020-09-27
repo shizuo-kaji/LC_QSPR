@@ -18,13 +18,16 @@ library(e1071)
 library(gbm)
 library(caret)
 library(dplyr)  
-
+library(data.table)
+library(scales)
 
 ## variables which are not used for prediction
 nonvar <- c(
   "ID","SMILES","Phases","rac_en","Melting","Melting_type",
   "Ctype","Cm","Cp","Atype","Am","Ap","Btype","Bm","Bp",
-  "Ntype","Nm","Np","Dtype","Dm","Dp","Stype","Sm","Sp",
+  "Ntype","Nm","Np","Dtype","Dm","Dp",
+  "Stype","Sm","Sp","Xtype","Ytype", ## unclear phases
+  "Ctype2","Ntype2",
   "Clearing_type","Clearing","num_C","num_H","num_N","prohibited","group"
 )
 kelv = -273.15
@@ -32,7 +35,8 @@ kelv = -273.15
 ############## function definition ####################
 ## load csv file
 readcsv <- function(filename, header=TRUE){
-  origdat <- read.csv(filename, header=header, sep = ",", stringsAsFactors = FALSE)
+  origdat <- fread(filename, stringsAsFactors = FALSE)
+#  origdat <- read.csv(filename, header=header, sep = ",", stringsAsFactors = FALSE)
   print(paste("# of rows",nrow(origdat)))
   #  sapply(origdat,is.numeric)
   #  origdat[] <- suppressWarnings(lapply(origdat,as.numeric))
@@ -134,32 +138,37 @@ plottab <- function(prediction,truth,title=""){
 }
 
 ## prepare for regression; set variables and formula
-prepare_prediction <- function(target,remove_monotropic=FALSE){
+prepare_prediction <- function(target,remove_monotropic=FALSE,combine_chiral=FALSE){
   target <<- target
   expvar <<- setdiff(colnames(dat), nonvar)
-  targetcol <<- colnames(dat) %in% target
   varcol <<- colnames(dat) %in% expvar
   f <<- as.formula(paste(paste(target, collapse=" + "),paste(expvar, collapse=" + "), sep=" ~ "))
   n <- nchar(target)
   lt <- substr(target,1,1) # phase name
   mp <- substr(target,n,n) # p or m
 
-  ## remove ambiguous (X can be the target)
-  dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Xtype==0,] 
-  ## remove ambiguous (S can be A,B,C,C*)
+  if( (target != "Clearing") &&  (target != "Melting")){
+    ## remove ambiguous (X can be the target)
+    dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Xtype==0,] 
+    ## remove ambiguous (S can be A,B,C,C*)
+  }
   if(lt=="A"|| lt=="B" || lt=="C"){
     dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Stype==0,] 
   }else if(lt=="D"){   ## remove ambiguous (Y can be Dh, Dr, ...)
     dat <<- dat[dat[[paste0(lt,"type")]]>0 | dat$Ytype==0,] 
   }
 
-  if((n<4 && (mp=="m" || mp=="p")) || (target=="Clearing") || (target=="Melting")){
+  if((n<4 && (mp=="m" || mp=="p")) || (target=="Clearing") || (target=="Melting")){ ## transition temperature
     is_regression <<- T
     #dat <<- dat[!is.na(dat[[target]]),]
     # remove rows with target < kelv or target > 800 and with target = 0 as they are not reliable
     dat <<- dat[dat[[target]] >= kelv & dat[[target]] <= 800 & dat[[target]]!=0,] 
-  }else{
+  }else{  ## existence of phase
     is_regression <<- F
+    if(mp=="2"){
+      dat[[target]] <<- 0
+      dat[dat[[paste0(lt,"type")]] > 0, target] <<- 1      
+    }
   }
 
   if(remove_monotropic && is_regression){
@@ -170,6 +179,7 @@ prepare_prediction <- function(target,remove_monotropic=FALSE){
       dat <<- dat[dat[[paste0(lt,"m")]] >= kelv & dat[[paste0(lt,"m")]] <= 800 & dat[[paste0(lt,"m")]]!=0,] 
     }
   }
+  targetcol <<- colnames(dat) %in% target
 }
 ############## End of function definition ####################
 
