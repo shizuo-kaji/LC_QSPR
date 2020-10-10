@@ -51,7 +51,8 @@ and execute it. Wait for some time and you will obtain *desc_sample.csv*.
 
 ### Prediction by R (lightGBM etc)
 
-- Open qspr.R in RStudio and load desc_sample.csv. The R script contains several regression and classification analysis. The scirpt is still very messy and needs to be cleaned.
+- Open the R Notebook *qspr.Rmd* in RStudio and load *desc_sample.csv*. 
+The R Notebook contains several regression and classification analysis.
 
 ### Prediction by Chainer Chemistry
 - Prepare training and test datasets in the csv format. The file should contain SMILES and target value to be predicted. No descriptor information is needed. 

@@ -146,7 +146,7 @@ sub printline {
 	if($prev_line =~ /true\t/){
 		$prev_line =~ s/true\t//;
 		if($prev_line !~ /dup\t/){  ## duplicate
-			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Btype'},$arr{'Bm'},$arr{'Bp'},$arr{'Ctype'},$arr{'Cm'},$arr{'Cp'},$arr{'Atype'},$arr{'Am'},$arr{'Ap'},$arr{'Stype'},$arr{'Sm'},$arr{'Sp'},$arr{'Ntype'},$arr{'Nm'},$arr{'Np'},$arr{'Dtype'},$arr{'Dm'},$arr{'Dp'},$arr{'Xtype'},$arr{'Ytype'},$arr{'Clearing_type'},$arr{'Clearing'},$arr{'num_C'},$arr{'num_H'},$arr{'num_N'}";
+			$prev_line = $prev_line.",$smiles,$phs,$arr{'rac_en'},$arr{'Melting_type'},$arr{'Melting'},$arr{'Btype'},$arr{'Bm'},$arr{'Bp'},$arr{'Ctype'},$arr{'Cm'},$arr{'Cp'},$arr{'Atype'},$arr{'Am'},$arr{'Ap'},$arr{'Stype'},$arr{'Ntype'},$arr{'Nm'},$arr{'Np'},$arr{'Dtype'},$arr{'Dm'},$arr{'Dp'},$arr{'Xtype'},$arr{'Ytype'},$arr{'Clearing_type'},$arr{'Clearing'},$arr{'num_C'},$arr{'num_H'},$arr{'num_N'}";
 			## pattern check flag
 			if($smiles !~ /$prohibited/){
 				print $prev_line.",0\n";
@@ -159,7 +159,7 @@ sub printline {
 
 ## start here
 ## print header
-print "#SMILES ID,SMILES,Phases,rac_en,Melting_type,Melting,Btype,Bm,Bp,Ctype,Cm,Cp,Atype,Am,Ap,Stype,Sm,Sp,Ntype,Nm,Np,Dtype,Dm,Dp,Xtype,Ytype,Clearing_type,Clearing,num_C,num_H,num_N,prohibited\n";
+print "#SMILES ID,SMILES,Phases,rac_en,Melting_type,Melting,Btype,Bm,Bp,Ctype,Cm,Cp,Atype,Am,Ap,Stype,Ntype,Nm,Np,Dtype,Dm,Dp,Xtype,Ytype,Clearing_type,Clearing,num_C,num_H,num_N,prohibited\n";
 
 my $prev_line="";
 my $smiles = "";
