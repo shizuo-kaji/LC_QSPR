@@ -23,7 +23,7 @@ remotes::install_url(PKG_URL)
 
 ```{r}
 ## install them using the following lines if they do not exist in your system
-#install.packages(c("gbm","bit64",Boruta","clue","coefplot","devtools","e1071","FNN","fastcluster","FactoMineR","FSelector","ggplot2","glmnet","kernlab","pls","PredPsych","Rtsne","randomForest"))
+#install.packages(c("plotROC","caret","gbm","bit64","Boruta","clue","coefplot","devtools","e1071","FNN","fastcluster","FactoMineR","FSelector","ggplot2","glmnet","kernlab","pls","PredPsych","Rtsne","randomForest"))
 #devtools::install_github("hoxo-m/pforeach")
 ```
 
@@ -36,8 +36,8 @@ Specify the following filenames
 
 ```{r}
 #master_csv <- "data/desc_sample.csv"  # output of mordred
-master_csv <- "d:/ml_res/desc_all.csv"  # output of mordred
-preprocessed_rds <- "d:/ml_res/desc_all.rds" # cached preprocessed data
+master_csv <- "~/R/desc_all.csv"  # output of mordred
+preprocessed_rds <- "~/R/desc_all.rds" # cached preprocessed data
 ```
 
 ## Preprocessing
@@ -65,10 +65,10 @@ matched <- TRUE
 #matched <- grep('A[[:digit:][:space:]\\*\\.\\?]+[Ni]',master_dat$Phases)
 
 ## check if SMILES and formula coincides
-#matched <- (dat$num_C == dat$nC) & (dat$num_N == dat$nN) & (dat$num_H == dat$nH)
+#matched <- (master_dat$num_C == master_dat$nC) & (master_dat$num_N == master_dat$nN) & (master_dat$num_H == master_dat$nH)
 
 ## select only molecules with #C+#N >= 12 (remove small and non-organic)
-#matched <- (dat$num_C+dat$num_N)>=12
+matched <- (master_dat$num_C+master_dat$num_N)>=12
 
 #matched <- (dat$prohibited == 0)
 
@@ -102,9 +102,9 @@ master_dat <- readRDS(preprocessed_rds)
 Choose the variable to be predicted
 ```{r}
 #dat <- prepare_prediction("Clearing")
-#dat <- prepare_prediction("Melting", only_type=1) # remove glass (Tg)
+dat <- prepare_prediction("Melting", only_type=1) # remove glass (Tg)
 #dat <- prepare_prediction("Cp",remove_monotropic = T, only_type=2)
-dat <- prepare_prediction("Dp",remove_monotropic = T)
+#dat <- prepare_prediction("Dp",remove_monotropic = T)
 #dat <- prepare_prediction("Nm",remove_monotropic = T)
 #dat <- prepare_prediction("Dtype")
 ```
@@ -118,13 +118,13 @@ Train the model
 ```{r}
 folds <- 5  # number of folds for cross-validation
 if(is_regression){
-  params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+  params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5,verbosity=-1)
 }else{
   n_class <- length(unique(dat[[target]]))
   if(n_class==2){
-    params <- list(objective="binary", is_unbalance=T,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+    params <- list(objective="binary", is_unbalance=T,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5,verbosity=-1)
   }else{
-    params <- list(objective="multiclass", metric="multi_logloss",num_class=n_class,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5)
+    params <- list(objective="multiclass", metric="multi_logloss",num_class=n_class,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5,verbosity=-1)
   }
 }
 for(i in 1:folds){  ## cross validation

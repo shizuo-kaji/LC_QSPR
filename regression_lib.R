@@ -178,7 +178,13 @@ prepare_prediction <- function(targ,only_type=-1,remove_monotropic=FALSE,combine
     }
   }
   if(only_type >= 0){
-    dat <- dat[dat[[paste0(lt,"type")]]==only_type,]
+    if(target=="Melting"){
+      dat <- dat[dat[["Melting_type"]]==only_type,]
+    }else if(target=="Clearing"){
+      dat <- dat[dat[["Clearing_type"]]==only_type,]
+    }else{
+      dat <- dat[dat[[paste0(lt,"type")]]==only_type,]
+    }
   }
   
   targetcol <<- colnames(dat) %in% target
