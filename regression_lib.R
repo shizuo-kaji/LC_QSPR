@@ -163,9 +163,8 @@ prepare_prediction <- function(targ,only_type=-1,remove_monotropic=FALSE,combine
     dat <- dat[dat[[target]] >= kelv & dat[[target]] <= 800 & dat[[target]]!=0,] 
   }else{  ## existence of phase
     is_regression <<- F
-    if(mp=="2"){
-      dat[[target]] <- 0
-      dat[dat[[paste0(lt,"type")]] > 0, target] <- 1      
+    if(combine_chiral){
+      dat[[target]] <- as.integer(dat[[paste0(lt,"type")]] > 0)
     }
   }
 
@@ -199,6 +198,7 @@ prediction_result <- function(dat,bst,folds){
     #  testidx <- which(dat$group==2)  
     p <- predict(bst[[i]], as.matrix(dat[testidx,varcol]),reshape=T)
     t <- dat[testidx,target]
+    print(regression_summary(t,p))
     if(is_regression){
       prediction <- rbind(prediction,
                           data.frame(
@@ -221,6 +221,9 @@ prediction_result <- function(dat,bst,folds){
         }
       }
       prediction <- rbind(prediction,ps)
+      cm <- confusionMatrix(factor(ps$pred),factor(ps$truth),positive="1")
+      print(cm$overall[1])
+      print(cm$byClass)
     }  
   }
   return(prediction)

@@ -16,14 +16,8 @@ When you save the notebook, an HTML file containing the code and output will be 
 
 ## Preparation
 ```{r}
-##installation of lightGBM: look at https://github.com/microsoft/LightGBM/tree/master/R-package
-PKG_URL <- "https://github.com/microsoft/LightGBM/releases/download/v3.0.0/lightgbm-3.0.0-r-cran.tar.gz"
-remotes::install_url(PKG_URL)
-```
-
-```{r}
 ## install them using the following lines if they do not exist in your system
-#install.packages(c("plotROC","caret","gbm","bit64","Boruta","clue","coefplot","devtools","e1071","FNN","fastcluster","FactoMineR","FSelector","ggplot2","glmnet","kernlab","pls","PredPsych","Rtsne","randomForest"))
+#install.packages(c("plotROC","caret","gbm","bit64","Boruta","clue","coefplot","devtools","e1071","FNN","fastcluster","FactoMineR","FSelector","ggplot2","glmnet","kernlab","pls","PredPsych","Rtsne","randomForest","lightgbm"))
 #devtools::install_github("hoxo-m/pforeach")
 ```
 
@@ -37,7 +31,7 @@ Specify the following filenames
 ```{r}
 #master_csv <- "data/desc_sample.csv"  # output of mordred
 master_csv <- "~/R/desc_all.csv"  # output of mordred
-preprocessed_rds <- "~/R/desc_all.rds" # cached preprocessed data
+preprocessed_rds <- "d:/ml/desc_all.rds" # cached preprocessed data
 ```
 
 ## Preprocessing
@@ -107,6 +101,7 @@ dat <- prepare_prediction("Melting", only_type=1) # remove glass (Tg)
 #dat <- prepare_prediction("Dp",remove_monotropic = T)
 #dat <- prepare_prediction("Nm",remove_monotropic = T)
 #dat <- prepare_prediction("Dtype")
+#dat <- prepare_prediction("Ntype",combine_chiral = T)
 ```
 
 Load trained model, if you wish
