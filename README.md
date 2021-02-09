@@ -1,5 +1,7 @@
-# LC_QSPR
-Quantitative Structure-Property Relationships for Liquid Crystals
+# Quantitative Structure-Property Relationships for Liquid Crystals
+
+This is a companion code for the paper
+- Machine Learning Analysis for the Contribution of Molecular Fine Structures to the Symmetry of Liquid Crystals, by Yoshiaki Uchida, Shizuo Kaji, Naoto Nakano
 
 ## Requirements
 First, to set up Python environment, install [Anaconda](https://www.anaconda.com/products/individual).
