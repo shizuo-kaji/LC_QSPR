@@ -1,6 +1,0 @@
-#SMILES ID,SMILES,Phases,rac_en,Melting_type,Melting,Bmtype,Bm,Bptype,Bp,Cmtype,Cm,Cptype,Cp,Amtype,Am,Aptype,Ap,Smtype,Sm,Sptype,Sp,Nmtype,Nm,Nptype,Np,Clearing_type,Clearing,num_C,num_H,num_N,prohibited
-C1C=CC=CC=1	1,C1C=CC=CC=1,Cr 6 is,0,1,6,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,1,6,6,6,0,0
-OC1=CC=CC=C1	2,OC1=CC=CC=C1,Cr ? is,0,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,1,-300,6,6,0,0
-O=CC=CC=CC=CC1=CC=CC=C1	3,O=CC=CC=CC=CC1=CC=CC=C1,Cr 104 ? 110 is,0,1,104,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,1,110,13,12,0,0
-O=C(OCCCO)C1C=CC(=CC=1)C(OCCCO)=O	4,O=C(OCCCO)C1C=CC(=CC=1)C(OCCCO)=O,Cr 73.2 is,0,1,73.2,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,1,73.2,14,18,0,0
-O=C(OCCCCO)C1C=CC(=CC=1)C(OCCCCO)=O	5,O=C(OCCCCO)C1C=CC(=CC=1)C(OCCCCO)=O,Cr 65 N 72 is,0,1,65,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,0,-300,1,65,1,72,1,72,16,22,0,0
