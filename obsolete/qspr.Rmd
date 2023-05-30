@@ -1,0 +1,395 @@
+---
+title: "QSPR"
+author: "S. Kaji"
+date: '`r format(Sys.time(), "%y/%m/%d %H:%M")`'
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+
+## Preparation
+```{r}
+## install them using the following lines if they do not exist in your system
+#install.packages(c("plotROC","caret","gbm","bit64","Boruta","clue","coefplot","devtools","e1071","FNN","fastcluster","FactoMineR","FSelector","ggplot2","glmnet","kernlab","pls","PredPsych","Rtsne","randomForest","lightgbm"))
+#devtools::install_github("hoxo-m/pforeach")
+```
+
+
+```{r}
+source("regression_lib.R")
+```
+
+Specify the following filenames
+
+```{r}
+#master_csv <- "data/desc_sample.csv"  # output of mordred
+master_csv <- "~/R/desc_all.csv"  # output of mordred
+preprocessed_rds <- "d:/ml/desc_all.rds" # cached preprocessed data
+preprocessed_rds <- "~/Downloads/desc_all.rds" # cached preprocessed data
+```
+
+## Preprocessing
+if you already performed preprocessing and have the saved rds file (preprocessed_rds), you can skip to [Model](#model)
+
+
+Load the master data
+```{r}
+master_dat <- readcsv(master_csv)
+## if you want to add more data
+#master_dat$group=1
+#master_dat <- rbind(master_dat,data.frame(readcsv("NR_en.csv"),group=2)) 
+```
+
+Data filtering: uncomment necessary lines
+```{r}
+matched <- TRUE
+## selection by ID
+#matched <- !(master_dat$ID %in% 121104:121111)
+
+## selection by phase transition
+#matched <- grep('Cr[[:digit:][:space:]\\.\\?]+C[[:digit:][:space:]\\.\\?]+A[[:digit:][:space:]\\.\\?]+N[[:digit:][:space:]\\.\\?]+is',master_dat$Phases)
+#matched <- grep('[CB][[:digit:][:space:]\\*\\.\\?]+A[[:digit:][:space:]\\*\\.\\?]+[Ni]',master_dat$Phases)
+#matched <- grep('[CB][[:digit:][:space:]\\*\\.\\?]+A',master_dat$Phases)
+#matched <- grep('A[[:digit:][:space:]\\*\\.\\?]+[Ni]',master_dat$Phases)
+
+## check if SMILES and formula coincides
+#matched <- (master_dat$num_C == master_dat$nC) & (master_dat$num_N == master_dat$nN) & (master_dat$num_H == master_dat$nH)
+
+## select only molecules with #C+#N >= 12 (remove small and non-organic)
+matched <- (master_dat$num_C+master_dat$num_N)>=12
+
+#matched <- (dat$prohibited == 0)
+
+master_dat <- master_dat[matched,]
+```
+
+
+Standardize data
+```{r}
+master_dat <- mutate_at(master_dat, vars(-which(names(master_dat) %in% nonvar)),funs(scale))
+```
+
+Save the master data into a native R data format for faster loading for next time
+```{r}
+saveRDS(master_dat,preprocessed_rds)
+```
+
+## Model {#model}
+
+### LightGBM
+```{r}
+suppressPackageStartupMessages(library(lightgbm))
+packageVersion("lightgbm")
+```
+
+Load the preprocessed data file
+```{r}
+master_dat <- readRDS(preprocessed_rds)
+```
+
+Choose the variable to be predicted
+```{r}
+#dat <- prepare_prediction("Clearing")
+#dat <- prepare_prediction("Melting", only_type=1) # remove glass (Tg)
+#dat <- prepare_prediction("Cp",remove_monotropic = T, only_type=2)
+#dat <- prepare_prediction("Dp",remove_monotropic = T)
+#dat <- prepare_prediction("Np",remove_monotropic = T)
+#dat <- prepare_prediction("Am",remove_monotropic = T)
+#dat <- prepare_prediction("Bp",remove_monotropic = T)
+#dat <- prepare_prediction("Cm",remove_monotropic = T)
+#dat <- prepare_prediction("Dtype")
+dat <- prepare_prediction("Ntype",combine_chiral = T)
+```
+
+Load trained model, if you wish
+```{r}
+bst <- readRDS(paste0("result/lgb_",target,".rds"))
+#bst <- readRDS(paste0("result/lgb_inc_",target,".rds"))
+```
+
+Split dataset
+```{r}
+folds <- 10  # number of folds for cross-validation
+valsplit <- c(1,6)
+splitidx <- list()  ## split for validation
+for(i in 1:folds){  ## cross validation
+  splitidx[[i]] <- which(1:length(dat[,1])%%folds == (i%%folds))
+}
+validx <- c()
+for(k in valsplit){
+  validx <- c(validx,splitidx[[k]]) 
+}
+validx <- validx[order(validx)]
+splitidx[valsplit] <- NULL
+```
+
+Hyperparameter
+```{r}
+if(is_regression){
+  params <- list(objective="regression", metric="l2",lambda_l1 = 1,lambda_l2 = 1,max_depth = 5,verbosity=-1)
+}else{
+  n_class <- length(unique(dat[[target]]))
+  if(n_class==2){
+    params <- list(objective="binary", is_unbalance=T,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5,verbosity=-1)
+  }else{
+    params <- list(objective="multiclass", metric="multi_logloss",num_class=n_class,lambda_l1 = 1,lambda_l2 = 1,max_depth = 5,verbosity=-1)
+  }
+}
+```
+
+Train model while increasing the data size
+```{r}
+trainidx <- c()
+bst <- list()
+for(i in 1:(length(splitidx))){
+  trainidx <- c(trainidx, splitidx[[i]])
+  dtrain <- lgb.Dataset(as.matrix(dat[trainidx,varcol]), label = dat[trainidx,targetcol])
+  dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[validx,varcol]), label = dat[validx,targetcol])
+  bst[[i]] <- lgb.train(params, dtrain, 
+#                   device_type="gpu", 
+                   seed = 42,force_col_wise=T,
+                   num_leaves=2^4,  # should be less than 2^max_depth
+                   colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                   nrounds=20000, eval_freq=1000, min_data=1, learning_rate=0.1, 
+                   early_stopping_rounds=1000,   # set to 100 for quick test
+                   valids=list(test=dtest))
+}
+#saveRDS(bst,paste0("result/lgb_inc_",target,".rds"))
+```
+Prediction transition temperature
+```{r}
+qq <- list()
+for(i in 1:length(bst)){
+  prediction <- prediction_result(dat,bst[i:i],list(validx))
+  qq[[i]] <- c(quantile(abs(prediction$error), c(0.25,0.5,0.75)), mean(abs(prediction$error)),c(quantile(abs(prediction$ratio), c(0.25,0.5,0.75))))
+}
+write.csv(t(data.frame(qq)),paste0("qq_",target,".csv"))
+```
+```{r}
+acc <- list()
+f1s <- list()
+for(i in 1:length(bst)){
+  ps <- prediction_result(dat,bst[i:i],list(validx))
+  cm <- confusionMatrix(factor(ps$pred),factor(ps$truth),positive="1")
+  acc[[i]] <- cm$overall[[1]]
+}
+write.csv(t(data.frame(acc)),paste0("acc_",target,".csv"))
+```
+
+
+
+
+Cross validate model
+```{r}
+folds <- 5  # number of folds for cross-validation
+bst <- list()
+for(i in 1:folds){  ## cross validation
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  dtrain <- lgb.Dataset(as.matrix(dat[-testidx,varcol]), label = dat[-testidx,targetcol])
+  dtest <- lgb.Dataset.create.valid(dtrain,as.matrix(dat[testidx,varcol]), label = dat[testidx,targetcol])
+  bst[[i]] <- lgb.train(params, dtrain, 
+#                   device_type="gpu", 
+                   seed = 42,force_col_wise=T,
+                   num_leaves=2^4,  # should be less than 2^max_depth
+                   colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                   nrounds=20000, eval_freq=1000, min_data=1, learning_rate=0.1, 
+                   early_stopping_rounds=1000,   # set to 100 for quick test
+                   valids=list(test=dtest))
+}
+saveRDS(bst,paste0("lgb_",target,".rds"))
+```
+
+Inference using the learned model
+```{r}
+testidx <- list()
+for(i in 1:length(bst)){
+  testidx[[i]] <- which(1:length(dat[,1])%%folds == (i%%folds))
+  prediction <- prediction_result(dat,bst[i:i],testidx[i:i])
+}
+```
+
+```{r}
+#regression_summary(dat[testidx,target],predict(bst[[1]], as.matrix(dat[testidx,varcol]),reshape=T))
+prediction <- prediction_result(dat,bst,testidx)
+write.csv(file=paste0("prediction_",target,".csv"), prediction, row.names = FALSE)
+prediction_plot(prediction, plot_value=FALSE, plot_ROC=TRUE, plot_hist=TRUE)
+importance <- importance_csv(bst, file=paste0("importance_",target,".csv"))
+```
+
+hyper-parameter search
+```{r}
+grid_search <- expand.grid(Depth = 2:8,L1 = 0:5,L2 = 0:5)
+model <- list()
+perf <- numeric(nrow(grid_search))
+for (i in 1:nrow(grid_search)) {
+  model[[i]] <- lgb.train(list(objective = "regression",
+                               metric = "l2",
+                               lambda_l1 = grid_search[i, "L1"],
+                               lambda_l2 = grid_search[i, "L2"],
+                               max_depth = grid_search[i, "Depth"],
+                               verbosity = -1),
+                          dtrain,
+                          num_leaves=2^3,
+#                          device_type="gpu", 
+                          seed = 42,
+                          colsample_bytree = 0.4, min_child_weight = 1.5, subsample = 0.8,
+                          nrounds=10000, eval_freq=200, min_data=1, learning_rate=0.1, 
+                          early_stopping_rounds=80, valids=list(test=dtest))
+  perf[i] <- min(rbindlist(model[[i]]$record_evals$test$l2))
+}
+cat("Model ", which.min(perf), " is lowest loss: ", min(perf), sep = "","\n")
+print(grid_search[which.min(perf), ])
+
+```
+### RandomForest
+```{r}
+library(randomForest)
+#library(pforeach)
+
+## remove columns with NA
+dat <- dat[, !apply(dat, 2, function(x) any(is.na(x)) )]
+## remove columns with constant value
+#dat <- dat[, !apply(dat, 2, function(x) length(unique(x)) == 1 )]
+## remove columns with zero variance
+#dat_sd <- apply(dat, 2, sd) 
+#dat <- dat[, (!is.na(dat_sd) & dat_sd>1e-24) | (colnames(dat) %in% nonvar)]
+
+expvar <<- setdiff(colnames(dat), nonvar)
+varcol <<- colnames(dat) %in% expvar
+f <<- as.formula(paste(paste(target, collapse=" + "),paste(expvar, collapse=" + "), sep=" ~ "))
+
+bst <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  bst[[i]] <- randomForest(f, data=dat[-testidx,], ntree=500, na.action = na.roughfix)
+  #model <- pforeach(.cores=4, ntree = rep(200, .cores), .c = randomForest::combine)({
+  #  randomForest(f, data=dat[-testidx,], ntree=ntree) #,importance=T)
+  #})
+}
+prediction <- prediction_result(dat,bst,folds)
+prediction_plot(prediction, plot_value=FALSE, plot_ROC=TRUE, plot_hist=TRUE)
+## importance
+#importance(model)
+#varImpPlot(model, main=paste0("Var importance for ",target))
+```
+### PLS
+```{r}
+library(pls)
+library(plsRglm)
+ncomp=30
+bst <- list()
+prediction <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  bst[[i]] <- plsr(f, ncomp=ncomp, data=dat[-testidx,])
+#plsmodel <- plsRglm(f, data=dat[-testidx,],modele="pls-glm-gaussian") 
+#prediction <- predict(plsmodel, newdata=dat[testidx,],type="response")
+#summary(plsmodel)
+#plot(plsmodel, ncomp=ncomp, asp=1, line=TRUE)
+#plot(plsmodel, "loadings", comps=1:2, legendpos = "topleft")
+#plotpred(data.frame(dat[testidx,targetcol],prediction),"PLS Regression",sort=T)
+#write.csv(file="rac-bad.csv", bad, row.names = FALSE)
+  p <- predict(bst[[i]], newdata=dat[testidx,])[,1,bst[[i]]$ncomp]
+  t <- dat[testidx,target]
+  prediction <- rbind(prediction,
+                      data.frame(
+                        ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                        pred=p, truth=t, error=p-t,
+                        ratio=abs(p-t)/(t-kelv)))
+}
+prediction_plot(prediction, plot_value=FALSE, plot_ROC=TRUE, plot_hist=TRUE)
+
+```
+
+
+### SVM
+```{r}
+suppressPackageStartupMessages(library(e1071))
+## grid search for parameters
+#tun=tune.svm(f, data=dat, gamma=5^(seq(-10, -2, 2)), cost=3^(seq(0, 3, 1)),tunecontrol=tune.control(sampling="cross", cross=5))
+#plot(tun, transform.x=log10, transform.y=log10)
+#prediction <- predict(tun$best.model, testdat)
+#summary(tun)
+## model fitting
+bst <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  bst[[i]] <- svm(f, data=dat[-testidx,], kernel = "radial", cost=9.0, gamma = 0.001)
+}
+prediction <- prediction_result(dat,bst,folds)
+prediction_plot(prediction, plot_value=FALSE, plot_ROC=TRUE, plot_hist=TRUE)
+
+```
+
+### kNN regression
+```{r}
+library(FNN)
+k = 5
+prediction <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+  p <- knn.reg(dat[-testidx,varcol], test = dat[testidx,varcol], y=dat[-testidx,targetcol], k = k, algorithm=c("kd_tree", "cover_tree", "brute"))
+  p <- p$pred
+  t <- dat[testidx,target]
+  prediction <- rbind(prediction,
+                        data.frame(
+                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"],Phases=dat[testidx,"Phases"],
+                            pred=p, truth=t, error=p-t,
+                            ratio=abs(p-t)/(t-kelv)))
+}
+prediction_plot(prediction, plot_value=FALSE, plot_ROC=TRUE, plot_hist=TRUE)
+
+```
+
+### (generalised) linear regression
+```{r}
+require(coefplot)
+bst <- list()
+prediction <- list()
+for(i in 1:folds){
+  testidx <- which(1:length(dat[,1])%%folds == (i%%folds))
+#  bst[[i]] <- lm(f, data=dat[-testidx,], na.action = na.exclude)
+  bst[[i]] <- glm(f, data=dat[-testidx,], family = gaussian)
+#  bst[[i]] <- cv.glmnet(as.matrix(dat[-testidx,varcol]), as.vector(dat[-testidx,targetcol]), family="gaussian")
+  p <- predict(bst[[i]], (dat[testidx,varcol]),reshape=T)
+  t <- dat[testidx,target]
+  prediction <- rbind(prediction,
+                        data.frame(
+                          ID=dat[testidx,"ID"], SMILES=dat[testidx,"SMILES"], Phases=dat[testidx,"Phases"],
+                            pred=p, truth=t, error=p-t,
+                            ratio=abs(p-t)/(t-kelv)))
+}
+prediction_plot(prediction, plot_value=FALSE, plot_ROC=TRUE, plot_hist=TRUE)
+#anova(bst[[1]])
+#coefplot(bst[[1]])
+#library(semPlot)
+#semPaths(model,what="std",layout="circle")
+```
+## Visualization
+
+### PCA
+```{r}
+require(fastcluster) 
+library(FactoMineR)
+pca <- PCA(dat[,varcol],ncp=10,graph = FALSE,scale.unit=T)
+pcap <- data.frame(pca$ind$coord)
+#col = as.factor(dat[,targetcol])  ## classification
+col = dat[,targetcol]   ## regression
+#col = rep(F,length(dat[,1])); col[matched]=T
+l = sqrt(sapply(dat$SMILES,nchar))
+g <- ggplot(data=pcap, aes(x=pcap[,1],y=pcap[,2],color=col))+geom_point(size=I(2))
+#xlim=c(-100,300),ylim=c(-50,200),  #l
+g <- g+labs(main=target,xlab="primary component",ylab="sqrt of len(SMILES)") 
+#g <- g + geom_text_repel(aes(label=dat$SMILES),size=2)
+g <- g +scale_color_gradient(low="blue", high="red")  ## regression
+#g <- g + geom_point(data=data.frame(x=pcap[matched,1],y=pcap[matched,2]),aes(x,y,color=col[matched]),size=I(0.8))
+print(g)
+```
+
