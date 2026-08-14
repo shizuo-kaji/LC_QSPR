@@ -1,151 +1,198 @@
-# Quantitative Structure–Property Relationships for Liquid Crystals
+# LC-QSPR
 
-Predict liquid-crystal **phase sequences** and **transition temperatures**
-directly from SMILES using gradient-boosted trees and graph neural networks.
+LC-QSPR predicts liquid-crystal phases and transition temperatures directly
+from SMILES. It provides a workflow for data preparation, Mordred descriptors, CatBoost and LightGBM
+training, graph neural networks, cross-validation, interpretation and inference.
 
-> Companion code for: **Machine Learning Analysis for the Contribution of
-> Molecular Fine Structures to the Symmetry of Liquid Crystals** —
-> Yoshiaki Uchida, Shizuo Kaji, Naoto Nakano.
-
----
-
-## What is included
-
-| Path                                 | Description                                                      |
-| ------------------------------------ | ---------------------------------------------------------------- |
-| `LC_QSPR.ipynb`                      | Main Jupyter notebook (inference, training, dataset preparation) |
-| `sample.csv` / `sample.parquet`      | Tiny example dataset                                             |
-| `sample_desc.csv`                    | Pre-computed Mordred descriptors for `sample.csv`                |
-| `mordred_descriptors.csv`            | Descriptor catalogue (Shape / Electric / Flexible families)      |
-| `varnames.csv`                       | Descriptor names used by the bundled CatBoost models             |
-| `CatBoost_phase.cbm`                 | Pre-trained CatBoost phase classifier                            |
-| `CatBoost_temperature_7000epochs.cbm`| Pre-trained CatBoost transition-temperature regressor            |
-| `GATv2Conv_phase_temp_cv0.pt`        | Pre-trained GATv2Conv GNN (joint phase + temperature), portable `state_dict` format |
-| `LiqCryst52.parquet`                 | Full descriptor database used in the paper (large)               |
-
----
+The interface is designed for chemistry researchers: short notebooks explain
+the scientific cautions before each computation, whilst reusable Python
+functions keep long analyses consistent and testable.
 
 ## Installation
 
-Python ≥ 3.10 is recommended. Create an isolated environment and install
-the dependencies — a GPU is optional (the notebook falls back to CPU).
+Python 3.10 or later is required. From the repository root, install the package
+and the components needed for the work you intend to run:
 
 ```bash
-# 1. Create an environment (conda or venv — either is fine)
-conda create -n lcqspr python=3.11 -y
-conda activate lcqspr
+# Prediction with the distributed CatBoost models
+python -m pip install -e .
 
-# 2. Core scientific stack
-pip install numpy pandas matplotlib seaborn tqdm pyarrow joblib scipy scikit-learn ipywidgets
+# Notebooks and conventional model training
+python -m pip install -e ".[notebook,training]"
 
-# 3. Cheminformatics & descriptors
-pip install rdkit mordred iterative-stratification
-
-# 4. Gradient boosting
-pip install catboost lightgbm shap
-
-# 5. (Optional) hyper-parameter tuning + statistical plots
-pip install optuna statannotations
-
-# 6. PyTorch + PyTorch Geometric
-#    Pick the wheel index that matches your CUDA version — see
-#    https://pytorch.org and https://pytorch-geometric.readthedocs.io
-pip install torch torcheval torch_geometric
+# Complete workflow, including PyTorch Geometric
+python -m pip install -e ".[notebook,training,gnn]"
 ```
 
-> If you prefer **conda** for CUDA-enabled PyTorch / PyG:
->
-> ```bash
-> conda install -c pytorch -c nvidia pytorch torchvision torchaudio torcheval pytorch-cuda=12.1
-> conda install -c pyg pyg
-> ```
+No GPU is required for inference. Full GNN training is considerably faster on a
+compatible accelerator.
 
----
+## Notebook guide
 
-## Quick start (inference)
 
-If you only want to predict phases for a few molecules, you do not need to
-train anything — the bundled checkpoints are enough.
+Loo at [00_predict.ipynb](notebooks/00_predict.ipynb) for a quick demonstration of the prediction workflow.
 
-1. Launch the notebook:
+| Notebook | Purpose |
+|---|---|
+| `00_predict.ipynb` | Main: CatBoost and GNN inference from the same SMILES |
+| `01_prepare_data.ipynb` | Parse phase strings, calculate descriptors, separate chiral phases and filter records |
+| `02_train_catboost.ipynb` | Phase and temperature CV training, OOF results, importance and SHAP |
+| `03_train_lightgbm.ipynb` | Per-target CV training, learning curves, importance and Optuna tuning |
+| `04_train_gnn.ipynb` | Molecular graphs, GATv2Conv/NNConv, joint or single-task training and checkpoints |
+| `06_evaluate_and_interpret.ipynb` | Metrics, hybrid result tables, paper results and Mann–Whitney screening |
 
-   ```bash
-   jupyter lab LC_QSPR.ipynb
-   ```
 
-2. Run **Section 2 (Imports)**, **Section 3 (Global settings)** and
-   **Section 4 (GNN building blocks)**.
+## Quick prediction from CSV
 
-3. Jump to **Section 5 — Inference with pre-trained models**, edit the
-   `SMILES` list, and run the CatBoost and/or GNN prediction cells.
+Prepare a CSV containing a `SMILES` column, then run:
 
-The output is a `DataFrame` with a reconstructed LiqCryst-style
-`pred_Phases` column plus per-target probabilities and temperatures.
-
----
-
-## Training your own models
-
-1. **Prepare a dataset.** See **Section 7** of the notebook.
-
-   The input is a CSV with at least the columns:
-
-   - `ID` — integer identifier
-   - `SMILES` — SMILES string
-   - `Phases` — LiqCryst-style phase sequence, e.g.
-     `Cr 76.8 A 112.5 N* 119.8 is`
-
-   A small `sample.csv` is bundled for quick testing. Section 7 parses
-   the `Phases` column into per-phase type / T⁻ / T⁺ columns and then
-   computes ~1,800 Mordred descriptors in parallel, writing the result
-   to a Parquet file.
-
-2. **Train.** Point `descriptor_fn` in **Section 6.1** at the parquet
-   file you just created, then run:
-
-   - **Section 6.2** to train CatBoost (phase classifier + temperature
-     regressor),
-   - **Section 6.3** to train LightGBM,
-   - **Section 6.4** to train a GNN jointly for phase and temperature.
-
-   Each section performs 5-fold cross-validation and writes
-   out-of-fold predictions, feature importances and summary metrics
-   into `outdir` (default `result_test/`).
-
----
-
-## Project structure
-
+```bash
+lcqspr --input examples/data/sample.csv --output results/predictions.csv
 ```
+
+A SMILES string may also be supplied directly:
+
+```bash
+lcqspr --smiles "CCO" --output results/ethanol_prediction.csv
+```
+
+The output includes the readable `predicted_phase_sequence`, per-phase decisions
+and probabilities, and all predicted lower and upper transition temperatures.
+
+## Python interface
+
+### CatBoost inference
+
+```python
+from lc_qspr import predict_smiles
+
+prediction = predict_smiles([
+    "CCCCCCCCCC1=CC=C(C=C1)C2=CC=CC=C2",
+])
+print(prediction[["SMILES", "predicted_phase_sequence"]])
+```
+
+### Selecting your own trained models
+
+The distributed models remain the default. A CatBoost pair produced by your own
+training run can be selected explicitly, without renaming or moving either file:
+
+```python
+prediction = predict_smiles(
+    ["CCCCCCCCCC1=CC=C(C=C1)C2=CC=CC=C2"],
+    phase_model="results/my_run/phase.cbm",
+    temperature_model="results/my_run/temperature.cbm",
+)
+```
+
+The command-line interface accepts the same paths:
+
+```bash
+lcqspr --input examples/data/sample.csv \
+  --phase-model results/my_run/phase.cbm \
+  --temperature-model results/my_run/temperature.cbm \
+  --output results/my_run/predictions.csv
+```
+
+A user-trained GNN checkpoint is selected with one option:
+
+```bash
+lcqspr --input examples/data/sample.csv \
+  --gnn-model results/my_run/GNN_joint_cv0.pt \
+  --output results/my_run/gnn_predictions.csv
+```
+
+For Python-based GNN inference, pass the same checkpoint path to
+`lc_qspr.gnn.predict_gnn_smiles`. Model paths may be relative to the current
+working directory or represented by `pathlib.Path` objects.
+
+### Data preparation
+
+```python
+from lc_qspr.preprocessing import (
+    add_mordred_descriptors,
+    filter_training_table,
+    parse_phase_table,
+    read_table,
+    separate_chiral_phases,
+)
+
+raw = read_table("examples/data/sample.csv")
+parsed, report = parse_phase_table(raw)
+described = add_mordred_descriptors(parsed)
+separated, chiral_phases = separate_chiral_phases(described)
+training_table = filter_training_table(
+    separated,
+    minimum_nitrogen_and_carbon=0,
+    suspicious_tokens=(),
+)
+```
+
+### Model training
+
+Training functions accept explicit feature names, target names and CV indices;
+they do not rely on notebook globals.
+
+```python
+from lc_qspr.catboost_training import CatBoostConfig, train_catboost_phases
+from lc_qspr.evaluation import cross_validation_splits
+
+splits = cross_validation_splits(
+    training_table,
+    phase_targets,
+    mode="classification",
+    n_splits=5,
+)
+result = train_catboost_phases(
+    training_table,
+    feature_names,
+    phase_targets,
+    splits,
+    config=CatBoostConfig(iterations=5000),
+)
+```
+
+Equivalent maintained APIs are provided in `lc_qspr.lightgbm_training` and
+`lc_qspr.gnn`. The GNN training function supports `classification`, `regression`
+and joint `both` modes.
+
+## Package data
+
+`mordred_descriptors.csv` and `varnames.csv` are installed as package data, so
+they do not depend on the current working directory:
+
+```python
+from lc_qspr import descriptor_catalogue, model_descriptor_names
+
+catalogue = descriptor_catalogue()
+descriptor_names = model_descriptor_names()
+```
+
+## Repository structure
+
+```text
 LC_QSPR/
-├── LC_QSPR.ipynb             # main notebook
-├── README.md
-├── mordred_descriptors.csv   # descriptor catalogue
-├── varnames.csv              # descriptors used by the CatBoost models
-├── sample.csv                # tiny example dataset
-├── sample_desc.csv           # with pre-computed descriptors
-├── CatBoost_*.cbm            # pre-trained gradient-boosted models
-├── GATv2Conv_*.pth           # pre-trained GNN
-├── data/                     # raw LiqCryst-derived tables
-├── images/                   # figures generated for the paper
-├── reference/                # reference outputs
-└── results/                  # training logs / model outputs
+├── pyproject.toml              # Build metadata and dependency groups
+├── src/lc_qspr/                # Reusable package
+│   └── data/                   # Installed descriptor tables
+├── notebooks/                  # Executable, task-focused workflows
+├── examples/data/              # Small demonstration inputs
+├── models/                     # Distributed CatBoost and GNN models
+├── results/                    # New generated outputs
+├── tests/                      # Unit and integration tests
+└── obsolete/                   # Historical notebooks, code, data and results
 ```
-
----
 
 ## Citation
 
-If you use this code please cite:
-
 ```bibtex
 @article{uchida_kaji_nakano_lcqspr,
-  title  = {Machine Learning Analysis for the Contribution of Molecular
-            Fine Structures to the Symmetry of Liquid Crystals},
-  author = {Uchida, Yoshiaki and Kaji, Shizuo and Nakano, Naoto},
+  title   = {Extracting Knowledge from Predictive Machine Learning Models},
+  author  = {Yoshiaki Uchida and Shizuo Kaji and Naoto Nakano},
+  journal = {液晶},
+  volume  = {28},
+  number  = {4},
+  pages   = {234--241},
+  year    = {2024},
 }
 ```
-
-## License
-
-See the repository for license terms.

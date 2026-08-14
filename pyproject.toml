@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lc-qspr"
+version = "0.2.0"
+description = "Liquid-crystal phase and transition-temperature prediction from SMILES"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  {name = "Yoshiaki Uchida"},
+  {name = "Shizuo Kaji"},
+  {name = "Naoto Nakano"},
+]
+dependencies = [
+  "catboost>=1.2,<2",
+  "mordredcommunity>=2.0.7,<3",
+  "numpy>=1.26,<3",
+  "pandas>=2.1,<4",
+  "rdkit>=2023.9",
+]
+
+[project.optional-dependencies]
+notebook = [
+  "ipykernel>=6",
+  "jupyterlab>=4",
+  "matplotlib>=3.8",
+  "nbclient>=0.10",
+  "nbformat>=5.10",
+  "pyarrow>=15",
+  "seaborn>=0.13",
+]
+training = [
+  "iterative-stratification>=0.1.9",
+  "joblib>=1.3",
+  "lightgbm>=4.0,<5",
+  "optuna>=4,<5",
+  "scikit-learn>=1.4,<2",
+  "scipy>=1.12,<2",
+  "shap>=0.45,<1",
+  "statannotations>=0.7,<1",
+  "tqdm>=4.66",
+]
+gnn = [
+  "torch>=2.4,<3",
+  "torch-geometric>=2.6,<3",
+]
+dev = [
+  "build>=1.2",
+  "pytest>=8",
+]
+
+[project.scripts]
+lcqspr = "lc_qspr.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lc_qspr = ["data/*.csv"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore:distutils Version classes are deprecated:DeprecationWarning:mordred.*",
+  "ignore:It is not recommended to directly access the internal storage format:UserWarning:torch_geometric.*",
+  "ignore:Failing to pass a value to the 'type_params'.*:DeprecationWarning:torch_geometric.*",
+]
