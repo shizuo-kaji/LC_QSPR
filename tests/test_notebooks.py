@@ -6,7 +6,7 @@ import nbformat
 
 def test_notebooks_are_executed_and_every_code_cell_has_guidance():
     paths = sorted(Path("notebooks").glob("*.ipynb"))
-    assert len(paths) == 6
+    assert len(paths) == 7
 
     for path in paths:
         notebook = nbformat.read(path, as_version=4)
