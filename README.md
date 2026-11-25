@@ -2,6 +2,12 @@
 
 **LC-QSPR** predicts liquid-crystal mesophases and transition temperatures (°C) directly from molecular structures represented as SMILES strings.
 
+**[Open the interactive phase explorer](https://lc-qspr.streamlit.app/)**
+
+Start with 5CB or paste your own SMILES. Choose GATv2 GNN or CatBoost, then edit an atom or side chain to compare the predicted phase sequence, melting point and clearing point with those of the original molecule.
+
+![An editable cyanobiphenyl structure feeds either GATv2 GNN or CatBoost. The explorer compares the predicted phase sequence and temperature shifts with the reference molecule.](docs/phase-explorer.svg)
+
 ---
 
 ## What LC-QSPR Predicts

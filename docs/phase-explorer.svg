@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="226" viewBox="0 0 960 226" role="img" aria-labelledby="title description">
+  <title id="title">From molecular structure to predicted liquid-crystal transitions</title>
+  <desc id="description">A cyanobiphenyl has an editable side chain marked R. Choose GATv2 GNN for its atom and bond graph or CatBoost for its 2D Mordred descriptors. Compare the edited and reference phase sequences and the shifts in melting and clearing temperatures.</desc>
+  <style>
+    text { font-family: Inter, "Helvetica Neue", Arial, sans-serif; fill: #18383b; }
+    .heading { font-size: 21px; font-weight: 700; }
+    .label { font-size: 16px; font-weight: 600; }
+    .note { font-size: 15px; fill: #405a60; }
+    .bond { fill: none; stroke: #213d42; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+    .arrow { fill: none; stroke: #527375; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .icon { fill: #edf6f2; stroke: #26635f; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+  <rect x="1" y="1" width="958" height="224" rx="14" fill="#fafcfb" stroke="#cfdbd8"/>
+
+  <g aria-label="Molecular input">
+    <text class="heading" x="24" y="38">Edit a molecule</text>
+    <rect x="25" y="101" width="33" height="31" rx="8" fill="#f8e7c0" stroke="#bd934b"/>
+    <text x="41.5" y="123" text-anchor="middle" font-size="19" font-weight="700">R</text>
+    <g class="bond">
+      <path d="M58 116.5h20 M78 116.5l15-26h30l15 26-15 26H93z"/>
+      <path d="M97 95.5h22 M131.5 116.5l-11 19 M92.5 135.5l-11-19"/>
+      <path d="M138 116.5h25 M163 116.5l15-26h30l15 26-15 26h-30z"/>
+      <path d="M182 95.5h22 M216.5 116.5l-11 19 M177.5 135.5l-11-19"/>
+      <path d="M223 116.5h46 M246 112.5h23 M246 120.5h23"/>
+    </g>
+    <text x="273" y="122.5" font-size="18" font-weight="600" fill="#27527a">N</text>
+    <text class="label" x="24" y="181">Cyanobiphenyl core</text>
+    <text class="note" x="24" y="203">R marks the editable side chain.</text>
+  </g>
+
+  <path class="arrow" d="M305 116.5h29m-7-6 7 6-7 6"/>
+  <g aria-label="Model selection">
+    <text class="heading" x="355" y="38">Choose a model</text>
+    <rect x="355" y="58" width="226" height="64" rx="9" fill="#edf6f2" stroke="#c9ded7"/>
+    <g class="icon">
+      <path fill="none" d="m371 91 12-12 11 10-8 13-15-11"/>
+      <circle cx="371" cy="91" r="3"/><circle cx="383" cy="79" r="3"/>
+      <circle cx="394" cy="89" r="3"/><circle cx="386" cy="102" r="3"/>
+    </g>
+    <text class="label" x="411" y="85">GATv2 GNN</text>
+    <text class="note" x="411" y="107">Atom and bond graph</text>
+    <rect x="355" y="135" width="226" height="64" rx="9" fill="#edf3f8" stroke="#cddbe5"/>
+    <g fill="#edf3f8" stroke="#476482" stroke-width="1.8" stroke-linejoin="round">
+      <path fill="none" d="m383 155-10 12m10-12 10 12m-20 0-6 12m6-12 7 12"/>
+      <circle cx="383" cy="155" r="3"/><circle cx="373" cy="167" r="3"/><circle cx="393" cy="167" r="3"/>
+      <circle cx="367" cy="179" r="3"/><circle cx="380" cy="179" r="3"/>
+    </g>
+    <text class="label" x="411" y="162">CatBoost</text>
+    <text class="note" x="411" y="184">2D Mordred descriptors</text>
+  </g>
+
+  <path class="arrow" d="M598 116.5h29m-7-6 7 6-7 6"/>
+  <g aria-label="Prediction and comparison">
+    <text class="heading" x="649" y="38">Compare predictions</text>
+    <text class="note" x="649" y="80">Example phase sequence on heating</text>
+    <rect x="649" y="99" width="70" height="35" rx="7" fill="#e3eaee"/>
+    <rect x="750" y="99" width="76" height="35" rx="7" fill="#d8ede5"/>
+    <rect x="857" y="99" width="79" height="35" rx="7" fill="#f6e7c9"/>
+    <text class="label" x="684" y="122" text-anchor="middle">Crystal</text>
+    <text class="label" x="788" y="122" text-anchor="middle">Nematic</text>
+    <text class="label" x="896.5" y="122" text-anchor="middle">Isotropic</text>
+    <path class="arrow" d="M726 116.5h16m-5-4.5 5 4.5-5 4.5 M833 116.5h16m-5-4.5 5 4.5-5 4.5"/>
+    <text class="label" x="649" y="181">Melting and clearing shifts</text>
+    <text class="note" x="649" y="203">ΔT = edited − reference (°C)</text>
+  </g>
+</svg>
