@@ -389,7 +389,7 @@ def smiles_to_graph(
 ) -> Data:
     """Convert one SMILES string into a bidirectional PyG graph."""
     molecule = Chem.MolFromSmiles(smiles)
-    if molecule is None:
+    if molecule is None or molecule.GetNumAtoms() == 0:
         raise ValueError(f"Invalid SMILES: {smiles}")
     if explicit_hydrogens:
         molecule = Chem.AddHs(molecule)
@@ -417,10 +417,18 @@ def smiles_to_graph(
         )
         for source, destination in zip(rows, columns)
     ]
+    edge_attributes = np.asarray(edge_features, dtype=np.float32)
+    if not edge_features:
+        # A single atom still needs the same edge feature axis as a bonded molecule.
+        width = sum(
+            block.width for block in EDGE_FEATURE_BLOCKS
+            if placeholder_excluded or not _is_excluded(block.name, exclude)
+        )
+        edge_attributes = np.empty((0, max(1, width)), dtype=np.float32)
     data = Data(
         x=torch.tensor(np.asarray(node_features), dtype=torch.float32),
         edge_index=torch.tensor(np.vstack([rows, columns]), dtype=torch.long),
-        edge_attr=torch.tensor(np.asarray(edge_features), dtype=torch.float32),
+        edge_attr=torch.from_numpy(edge_attributes),
         y=torch.tensor(
             [list(y_float) if y_float is not None else []], dtype=torch.float32
         ),

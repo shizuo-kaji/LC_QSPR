@@ -46,6 +46,10 @@ gnn = [
   "torch>=2.4,<3",
   "torch-geometric>=2.6,<3",
 ]
+demo = [
+  "streamlit>=1.64,<2",
+  "streamlit-ketcher-editor==0.2.0",
+]
 dev = [
   "build>=1.2",
   "pytest>=8",

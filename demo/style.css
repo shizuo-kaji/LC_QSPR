@@ -1,0 +1,50 @@
+.stMainBlockContainer {
+    max-width: 85rem;
+    padding: 3.5rem 2.5rem 3rem;
+}
+
+.stMain h1 {
+    letter-spacing: -0.045em;
+    line-height: 1.12;
+}
+
+.st-key-smiles_form {
+    padding-block: 0.65rem 1rem;
+    border-bottom: 1px solid var(--st-border-color);
+}
+
+.st-key-reference_input input {
+    font-family: ui-monospace, monospace;
+}
+
+.st-key-edited_prediction,
+.st-key-reference_prediction {
+    background: var(--st-background-color);
+}
+
+.st-key-edited_prediction {
+    border-top: 3px solid #21746b;
+}
+
+.phase-sequence {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.48rem;
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.65;
+}
+
+.phase-sequence .phase {
+    padding-inline: 0.42rem;
+    border-radius: 0.28rem;
+    color: #164d47;
+    background: #dfefeb;
+}
+
+@media (max-width: 700px) {
+    .stMainBlockContainer {
+        padding: 3.5rem 1rem 2rem;
+    }
+}

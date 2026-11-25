@@ -1,0 +1,4 @@
+# Streamlit Community Cloud installs from the repository root.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0+cpu ; sys_platform == "linux"
+.[demo,gnn]

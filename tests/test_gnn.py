@@ -33,6 +33,17 @@ def test_distributed_gnn_checkpoint_predicts():
     )
 
 
+def test_single_atom_can_be_batched_with_a_bonded_molecule():
+    result = predict_gnn_smiles(
+        ["C", "CC"], "models/GATv2Conv_phase_temp_cv0.pt", device="cpu"
+    )
+    assert np.isfinite(result["pred_Clearing"]).all()
+    for placeholder in (True, False):
+        options = {"exclude": ("bond_is_conjugated",), "placeholder_excluded": placeholder}
+        width = smiles_to_graph("CC", **options).edge_attr.shape[1]
+        assert smiles_to_graph("C", **options).edge_attr.shape == (0, width)
+
+
 def test_joint_gnn_training_runs_one_epoch():
     smiles = ["CC", "CCC", "CCCC", "CCO", "CCN", "CCCl"]
     classification = pd.DataFrame({"Ntype": [0, 1, 0, 1, 0, 1]})

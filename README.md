@@ -30,7 +30,7 @@ Two pre-trained model families are bundled in `models/` and ready to use out of 
 
 ## Installation
 
-Python 3.10 or later is required. Run the command matching your workflow from the repository root:
+The core package requires Python 3.10 or later. Run the command matching your workflow from the repository root:
 
 ```bash
 # 1. Quick prediction with the bundled CatBoost models (CPU only, minimal dependencies)
@@ -93,6 +93,23 @@ The output CSV can be opened directly in Excel or pandas:
 | `prob_<Phase>type` / `pos_conf_<Phase>type` | Predicted probability (`0.0`–`1.0`) that the molecule exhibits `<Phase>` |
 | `pred_Melting`, `pred_Clearing` | Predicted melting and isotropic clearing temperatures (°C) |
 | `pred_<Phase>m`, `pred_<Phase>p` | Predicted lower (`m`) and upper (`p`) transition temperatures (°C) for `<Phase>` |
+
+### Option C — Interactive molecular editor
+
+The web demo uses Python 3.14 for the Ketcher molecular editor. From the repository root, install it in a Python 3.14 environment and launch it in a browser.
+
+```bash
+python -m pip install -e ".[demo,gnn]"
+python -m streamlit run demo/streamlit_app.py
+```
+
+1. Paste a **Reference SMILES** and select **Load reference**, or start with the supplied 5CB structure. [5CB in PubChem](https://pubchem.ncbi.nlm.nih.gov/compound/92319)
+2. In the sketch, choose an element and click the atom to replace, or use the bond and eraser tools to change a side chain. Predictions update as you edit. The 5CB–8CB buttons also let you explore a homologous series one methylene group at a time.
+3. Switch between **GATv2 GNN** and **CatBoost** to see the selected model's predictions for both structures. The signed melting and clearing temperature differences are the edited structure minus the reference, in °C. **Use edited structure as reference** starts another comparison from that molecule.
+
+The demo uses the distributed models in `models/`. To use compatible checkpoints, set `LC_QSPR_MODEL_DIR` or set individual paths with `LC_QSPR_GNN_MODEL`, `LC_QSPR_PHASE_MODEL` and `LC_QSPR_TEMPERATURE_MODEL`.
+
+For Streamlit Community Cloud, select `demo/streamlit_app.py` as the entry point and Python 3.14. The adjacent `requirements.txt` selects CPU PyTorch on Linux. A hosting repository needs the application, package and model files approved for external hosting. [Community Cloud deployment guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app)
 
 ---
 
