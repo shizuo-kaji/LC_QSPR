@@ -4,7 +4,7 @@
 
 **[Open the interactive phase explorer](https://lc-qspr.streamlit.app/)**
 
-Start with 5CB or paste your own SMILES. Choose GATv2 GNN or CatBoost, then edit an atom or side chain to compare the predicted phase sequence, melting point and clearing point with those of the original molecule.
+Start with 5CB or paste your own SMILES. Choose GATv2 GNN or CatBoost, then edit an atom or side chain to compare the predicted phase sequence, melting point and clearing point with those of the original molecule. To screen a file, open **Batch predictions** and download the results as a CSV.
 
 ![An editable cyanobiphenyl structure feeds either GATv2 GNN or CatBoost. The explorer compares the predicted phase sequence and temperature shifts with the reference molecule.](docs/phase-explorer.svg)
 
@@ -113,9 +113,11 @@ python -m streamlit run demo/streamlit_app.py
 2. In the sketch, choose an element and click the atom to replace, or use the bond and eraser tools to change a side chain. Predictions update as you edit. The 5CB–8CB buttons also let you explore a homologous series one methylene group at a time.
 3. Switch between **GATv2 GNN** and **CatBoost** to see the selected model's predictions for both structures. The signed melting and clearing temperature differences are the edited structure minus the reference, in °C. **Use edited structure as reference** starts another comparison from that molecule.
 
+In **Batch predictions**, upload a UTF-8 CSV with a `SMILES` column and an optional `ID`, or a `.smi` or `.txt` file with one SMILES per line (up to 2 MB). Select **Predict list**, then **Download results (CSV)**. Each input row keeps its position and identifier, including duplicates. The CSV gives the model, predicted phase sequence, melting and clearing temperatures in °C, and an error message for any invalid structure.
+
 The demo uses the distributed models in `models/`. To use compatible checkpoints, set `LC_QSPR_MODEL_DIR` or set individual paths with `LC_QSPR_GNN_MODEL`, `LC_QSPR_PHASE_MODEL` and `LC_QSPR_TEMPERATURE_MODEL`.
 
-For Streamlit Community Cloud, select `demo/streamlit_app.py` as the entry point and Python 3.14. The adjacent `requirements.txt` selects CPU PyTorch on Linux. A hosting repository needs the application, package and model files approved for external hosting. [Community Cloud deployment guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app)
+Streamlit Community Cloud runs `demo/streamlit_app.py` from `main` with Python 3.14. The adjacent `requirements.txt` selects CPU PyTorch on Linux and installs LC-QSPR in editable mode, so updates to the prediction code are read from the checkout. Changes to the source, model files and descriptor tables refresh the demo's cached predictions. [Community Cloud deployment guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app)
 
 ---
 

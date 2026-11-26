@@ -1,3 +1,7 @@
+[server]
+runOnSave = true
+folderWatchList = ["demo", "src/lc_qspr/data", "models"]
+
 [client]
 toolbarMode = "viewer"
 
