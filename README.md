@@ -113,7 +113,7 @@ python -m streamlit run demo/streamlit_app.py
 2. In the sketch, choose an element and click the atom to replace, or use the bond and eraser tools to change a side chain. Predictions update as you edit. The 5CB–8CB buttons also let you explore a homologous series one methylene group at a time.
 3. Switch between **GATv2 GNN** and **CatBoost** to see the selected model's predictions for both structures. The signed melting and clearing temperature differences are the edited structure minus the reference, in °C. **Use edited structure as reference** starts another comparison from that molecule.
 
-In **Batch predictions**, upload a UTF-8 CSV with a `SMILES` column and an optional `ID`, or a `.smi` or `.txt` file with one SMILES per line (up to 2 MB). Select **Predict list**, then **Download results (CSV)**. Each input row keeps its position and identifier, including duplicates. The CSV gives the model, predicted phase sequence, melting and clearing temperatures in °C, and an error message for any invalid structure.
+In **Batch predictions**, upload a UTF-8 CSV with a `SMILES` column and an optional `ID`, or a `.smi` or `.txt` file with one SMILES per line (up to 2 MB). A name after a SMILES in a `.smi` file is kept as its ID. Select **Predict list**, then **Download results (CSV)**. Each input row keeps its position and identifier, including duplicates. The CSV gives the model, predicted phase sequence, melting and clearing temperatures in °C, and an error message for any invalid structure.
 
 The demo uses the distributed models in `models/`. To use compatible checkpoints, set `LC_QSPR_MODEL_DIR` or set individual paths with `LC_QSPR_GNN_MODEL`, `LC_QSPR_PHASE_MODEL` and `LC_QSPR_TEMPERATURE_MODEL`.
 

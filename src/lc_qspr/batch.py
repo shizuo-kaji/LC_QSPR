@@ -34,7 +34,14 @@ def read_smiles_list(filename: str, contents: bytes) -> pd.DataFrame:
         else:
             raise ValueError("A CSV with multiple columns needs one column named SMILES.")
     elif suffix in {".smi", ".txt"}:
-        result = pd.DataFrame({"SMILES": [line.strip() for line in text.splitlines() if line.strip()]})
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        result = pd.DataFrame({"SMILES": lines})
+        if suffix == ".smi":
+            # In named SMILES files, a CXSMILES block belongs to the structure.
+            fields = result["SMILES"].str.extract(r"^(\S+(?:\s+\|[^|]*\|)?)(?:\s+(.+))?$")
+            result["SMILES"] = fields[0]
+            if fields[1].notna().any():
+                result.insert(0, "ID", fields[1].fillna(""))
     else:
         raise ValueError("Choose a CSV, SMI or TXT file.")
 

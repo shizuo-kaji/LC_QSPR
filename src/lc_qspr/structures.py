@@ -13,7 +13,7 @@ def molecule_from_smiles(smiles: str) -> Chem.Mol:
     with rdBase.BlockLogs():
         molecule = Chem.MolFromSmiles(smiles.strip(), parameters)
     if molecule is None or molecule.GetNumAtoms() == 0:
-        raise ValueError("This structure could not be read. Check the SMILES, bonds and atom valences.")
+        raise ValueError("Could not read this SMILES. Check ring numbers, brackets, bond orders and atom valences.")
     if any(atom.GetAtomicNum() == 0 for atom in molecule.GetAtoms()):
         raise ValueError("Replace each wildcard or attachment point with a chemical element.")
     return molecule

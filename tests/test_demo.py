@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -88,14 +89,25 @@ def test_batch_inputs_and_alignment():
     assert invalid_only[SUMMARY_COLUMNS].isna().all().all()
 
 
-def test_batch_upload_model_switch_and_download():
+def test_smi_preserves_names_and_extended_smiles():
+    contents = "CCO\t001\nCC\nOCC Éthanol sample\nCC |$C1;C2$| atoms 1 and 2\n"
+    inputs = read_smiles_list("named.smi", contents.encode())
+    assert inputs["SMILES"].tolist() == ["CCO", "CC", "OCC", "CC |$C1;C2$|"]
+    assert inputs["ID"].tolist() == ["001", "", "Éthanol sample", "atoms 1 and 2"]
+    assert read_smiles_list("unnamed.smi", b"CCO\nCC\n").columns.tolist() == ["SMILES"]
+
+
+def test_batch_upload_model_switch_and_download(monkeypatch):
     pytest.importorskip("streamlit_ketcher_editor")
     pytest.importorskip("torch_geometric")
+    from streamlit.runtime.memory_media_file_storage import MemoryMediaFileStorage
     from streamlit.testing.v1 import AppTest
 
     from lc_qspr.gnn import predict_gnn_smiles
     from lc_qspr.prediction import predict_smiles
 
+    media = MemoryMediaFileStorage("/mock/media")
+    monkeypatch.setattr("streamlit.testing.v1.app_test.MemoryMediaFileStorage", lambda endpoint: media)
     app_path = Path(__file__).resolve().parents[1] / "demo" / "streamlit_app.py"
     app = AppTest.from_file(app_path, default_timeout=60).run()
     uploaded = ("list.csv", b"ID,SMILES\n001,CCO\n002,C1CC\n003,OCC\n", "text/csv")
@@ -113,7 +125,16 @@ def test_batch_upload_model_switch_and_download():
         assert result["ID"].tolist() == ["001", "002", "003"]
         assert result["error"].ne("").tolist() == [False, True, False]
         assert result.loc[[0, 2], "pred_Clearing"].tolist() == pytest.approx([expected.at[0, "pred_Clearing"]] * 2)
-        assert app.get("download_button")[0].label == "Download results (CSV)"
+        download = app.get("download_button")[0]
+        assert download.label == "Download results (CSV)"
+        saved = media.get_file(Path(download.proto.url).name)
+        assert saved.mimetype == "text/csv"
+        assert saved.filename == f"list-{model.split()[0].lower()}-predictions.csv"
+        exported = pd.read_csv(
+            BytesIO(saved.content), dtype={"ID": str}, keep_default_na=False,
+            na_values={column: [""] for column in SUMMARY_COLUMNS},
+        )
+        pd.testing.assert_frame_equal(exported, result, check_dtype=False)
     app.file_uploader[0].set_value(("list.csv", b"SMILES\nCC\n", "text/csv")).run()
     assert not app.get("download_button")
     assert not app.dataframe
